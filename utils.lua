@@ -65,6 +65,15 @@ function utils.index_of(table, value)
     return nil
 end
 
+--- Get the length of a dict
+--- @param dict table
+--- @return integer
+function utils.len_d(dict)
+    local count = 0
+    for _ in pairs(dict) do count = count + 1 end
+    return count
+end
+
 --- Rounds a number to the nearest integer or to a specified decimal place.
 --- @param number number The number to round.
 --- @param decimal ?number The number of decimal places to round to. If omitted, rounds to the nearest integer.

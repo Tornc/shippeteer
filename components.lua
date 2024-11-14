@@ -4,6 +4,8 @@
     SHIP COMPONENTS MODULE
 ]]
 
+local utils = require("utils")
+
 local component = setmetatable({}, {})
 
 function component.ship()
@@ -16,6 +18,14 @@ function component.ship()
         self.name = name
         self.start_pos = start_pos
         return self
+    end
+
+    -- Returns the value of the queried field
+    --- @param field_name string
+    --- @return string name
+    --- @return unknown field
+    function self.get_field(field_name)
+        return self.name, self[field_name]
     end
 
     return self
@@ -41,9 +51,10 @@ local function movable()
         end
     end
 
+    --- Returns the value of the queried field of the component and all its children.
     --- @param field_name string It's great that `field = ...` is equivalent to `["field"] = ...`
-    --- @return table
-    function self.get_fields(field_name)
+    --- @return table result `{name1 = field1, name2 = field2, ...}`
+    function self.get_field(field_name)
         local fields = {}
 
         local function traverse_and_collect(comp)
@@ -54,6 +65,8 @@ local function movable()
         end
 
         traverse_and_collect(self)
+
+        if utils.len_d(fields) == 0 then error("No such fields found.", 2) end
         return fields
     end
 
