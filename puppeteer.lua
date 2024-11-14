@@ -5,7 +5,6 @@
 ]]
 
 local async = require("async_actions")
-local components = require("components")
 local utils = require("utils")
 
 local pretty = require("cc.pretty")
@@ -20,7 +19,7 @@ end
 
 --- @param comp table
 --- @param waypoints table Format: `{vector1:, {vector2, true}, ...}`
---- @param timeout number
+--- @param timeout number?
 function puppeteer.path_move_to(comp, waypoints, timeout)
     return async.action().create(function()
         for _, waypoint in pairs(waypoints) do
@@ -44,6 +43,24 @@ function puppeteer.lock_on(comp, target_pos, timeout)
 end
 
 function puppeteer.turret_to_idle(comp, timeout)
+    error("Not implemented.")
+end
+
+--- @param comp table
+--- @param weapon_name string If nil, fire all weapons.
+--- @param duration number
+--- @param firerate integer Only applies to continuous weapons
+function puppeteer.fire(comp, weapon_name, duration, firerate)
+    error("Not implemented.")
+end
+
+--- @param comp any
+--- @param target_pos any
+--- @param fire_action any
+--- @param timeout any
+--- @TODO if target is a vehicle, then pos_target should be: `function() return veh_pos end` (a variable_ref).
+--- @TODO actually, where the FUCK do we get veh_pos from?
+function puppeteer.fire_at(comp, target_pos, fire_action, timeout)
     error("Not implemented.")
 end
 

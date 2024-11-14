@@ -6,6 +6,8 @@
 
 local utils = require("utils")
 
+local pretty = require("cc.pretty")
+
 local component = setmetatable({}, {})
 
 function component.ship()
@@ -100,6 +102,71 @@ function component.hull()
     return self
 end
 
+local function weapon()
+    local self = setmetatable({}, {})
+
+    function self.create(name, links)
+        self.name = name
+        self.links = links
+        return self
+    end
+
+    function self.get_name()
+        return self.name
+    end
+
+    function self.get_links()
+        return self.links()
+    end
+
+    return self
+end
+
+local function continuous_weapon()
+    local self = weapon()
+    local super_create = self.create
+
+    --- @param name string
+    --- @param links string|table
+    --- @param fire_rate integer
+    --- @return table
+    function self.create(name, links, fire_rate)
+        super_create(name, links)
+        self.fire_rate = fire_rate
+        return self
+    end
+
+    return self
+end
+
+local function non_continuous_weapon()
+    local self = weapon()
+    local super_create = self.create
+
+    --- @param name string
+    --- @param links string|table
+    --- @param reload_time number
+    --- @return table
+    function self.create(name, links, reload_time)
+        super_create(name, links)
+        self.reload_time = reload_time
+        self.time_last_fired = utils.current_time_seconds()
+        return self
+    end
+
+    --- @return number
+    function self.get_time_last_fired()
+        return self.time_last_fired
+    end
+
+    --- @param time number
+    function self.set_time_last_fired(time)
+        self.time_last_fired = time
+    end
+
+    return self
+end
+
 function component.turret()
     local self = movable()
     local super_create = self.create
@@ -120,17 +187,23 @@ function component.turret()
     end
 
     --- @param name string
-    --- @param link string Side
+    --- @param links string Side
     --- @param is_continuous boolean
     --- @param cooldown_firerate number cooldown (in seconds) applies to is_continuous `false`, firerate applies to `true`.
-    function self.add_weapon(name, link, is_continuous, cooldown_firerate)
-        self.weapons[name] = { link, is_continuous, cooldown_firerate }
+    function self.add_weapon(name, links, is_continuous, cooldown_firerate)
+        if is_continuous then
+            table.insert(self.weapons, continuous_weapon().create(name, links, cooldown_firerate))
+        else
+            table.insert(self.weapons, non_continuous_weapon().create(name, links, cooldown_firerate))
+        end
     end
 
     --- @param name string Name of the weapon you want to query.
-    --- @return table weapon_info Format: `{is_continuous, cooldown_firerate}`. cooldown_firerate is either in seconds or in redstone strength.
-    function self.get_weapon_info(name)
-        return self.weapons[name]
+    --- @return table? weapon
+    function self.get_weapon(name)
+        for _, wpn in pairs(self.weapons) do
+            if wpn.get_name() == name then return wpn end
+        end
     end
 
     return self

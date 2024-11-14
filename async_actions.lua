@@ -9,12 +9,6 @@ local utils = require("utils")
 local async_actions = setmetatable({}, {})
 local actions = {} -- A register of all the actions that have been created.
 
---- Returns the current time in seconds
---- @return number time Time since 1 January 1970 in the UTC timezone.
-local function get_current_time()
-    return os.epoch("utc") * 0.001
-end
-
 local function register_action(action)
     table.insert(actions, action)
 end
@@ -36,7 +30,7 @@ function async_actions.action()
         self.func = func
         self.timeout = timeout or 9999999 -- or in 2777 hrs
         self.state = STATES.RUNNING
-        self.end_time = get_current_time() + self.timeout
+        self.end_time = utils.current_time_seconds() + self.timeout
         self.co = coroutine.create(function() return self.func() end)
         register_action(self)
         return self
@@ -50,7 +44,7 @@ function async_actions.action()
         local _, err = coroutine.resume(self.co)
 
         if err then error(tostring(err)) end
-        if get_current_time() > self.end_time then error("Action #" .. utils.index_of(actions, self) .. " has timed out!") end
+        if utils.current_time_seconds() > self.end_time then error("Action #" .. utils.index_of(actions, self) .. " has timed out!") end
         if coroutine.status(self.co) == "dead" then self.terminate() end
     end
 
@@ -79,10 +73,10 @@ end
 --- @param duration number The duration to pause in seconds.
 function async_actions.pause(duration)
     if not coroutine.running() then return end
-    local end_time = get_current_time() + duration
+    local end_time = utils.current_time_seconds() + duration
     repeat
         coroutine.yield()
-    until get_current_time() > end_time
+    until utils.current_time_seconds() > end_time
 end
 
 --- Pause code execution of a thread until all the given actions have been terminated.

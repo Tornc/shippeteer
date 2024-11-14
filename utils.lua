@@ -39,6 +39,19 @@ function utils.contains(table, value)
     return false
 end
 
+--- The current time in seconds with 3 digits of precision.
+--- @return number time Time since 1 January 1970 in the UTC timezone.
+function utils.current_time_seconds()
+    return os.epoch("utc") * 0.001
+end
+
+--- If `variable` is not a table, wrap it in {...}. May come in handy when iterating over things.
+--- @param variable any
+--- @return table
+function utils.ensure_is_table(variable)
+    return type(variable) == "table" and variable or { variable }
+end
+
 --- Formats a time duration in seconds to a readable format.
 --- @param seconds number The duration in seconds.
 --- @return string time_string A formatted string representing the time in seconds (s), minutes (m), or hours (h).
