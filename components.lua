@@ -5,7 +5,6 @@
 ]]
 
 local utils = require("utils")
-
 local pretty = require("cc.pretty")
 
 local component = setmetatable({}, {})
@@ -25,7 +24,7 @@ function component.ship()
     -- Returns the value of the queried field
     --- @param field_name string
     --- @return string name
-    --- @return unknown field
+    --- @return any field
     function self.get_field(field_name)
         return self.name, self[field_name]
     end
@@ -47,6 +46,7 @@ local function movable()
     end
 
     --- @param ... table One or more components
+    --- @TODO PREVENT CIRCULAR REFERENCING!
     function self.add_child_component(...)
         for _, comp in pairs({ ... }) do
             table.insert(self.child_components, comp)
@@ -108,6 +108,7 @@ local function weapon()
     function self.create(name, links)
         self.name = name
         self.links = links
+        self.type = nil
         return self
     end
 
@@ -117,6 +118,12 @@ local function weapon()
 
     function self.get_links()
         return self.links()
+    end
+
+    --- This is dumb stuff
+    --- @return string
+    function self.get_type()
+        return self.type
     end
 
     return self
@@ -133,6 +140,7 @@ local function continuous_weapon()
     function self.create(name, links, fire_rate)
         super_create(name, links)
         self.fire_rate = fire_rate
+        self.type = "continuous"
         return self
     end
 
@@ -151,6 +159,7 @@ local function non_continuous_weapon()
         super_create(name, links)
         self.reload_time = reload_time
         self.time_last_fired = utils.current_time_seconds()
+        self.type = "non_continuous"
         return self
     end
 
@@ -204,6 +213,12 @@ function component.turret()
         for _, wpn in pairs(self.weapons) do
             if wpn.get_name() == name then return wpn end
         end
+    end
+
+    --- @param name string Name of the weapon you want to query.
+    --- @return boolean
+    function self.is_weapon_continuous(name)
+        return self.get_weapon(name).get_type() == "continuous"
     end
 
     return self
