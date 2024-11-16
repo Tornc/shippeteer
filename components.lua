@@ -18,31 +18,14 @@ function component.ship()
     function self.create(name, start_pos)
         self.name = name
         self.start_pos = start_pos
-        return self
-    end
-
-    -- Returns the value of the queried field
-    --- @param field_name string
-    --- @return string name
-    --- @return any field
-    function self.get_field(field_name)
-        return self.name, self[field_name]
-    end
-
-    return self
-end
-
---- There is 0 need to make a movable component by itself.
-local function movable()
-    local self = component.ship()
-    local super_create = self.create
-
-    function self.create(name, start_pos,
-                         sensor_id)
-        super_create(name, start_pos)
-        self.sensor_id = sensor_id
+        self.parent = nil
         self.child_components = {} -- Table of things that inherit from ship, can be left as nil
         return self
+    end
+
+    --- @param comp table
+    function self.add_parent_component(comp)
+        self.parent = comp
     end
 
     --- @param ... table One or more components
@@ -51,6 +34,10 @@ local function movable()
         for _, comp in pairs({ ... }) do
             table.insert(self.child_components, comp)
         end
+    end
+
+    function self.get_name()
+        return self.name
     end
 
     --- Returns the value of the queried field of the component and all its children.
@@ -69,6 +56,27 @@ local function movable()
         traverse_and_collect(self)
         return fields
     end
+    return self
+end
+
+--- There is 0 need to make a movable component by itself.
+local function movable()
+    local self = component.ship()
+    local super_create = self.create
+
+    function self.create(name, start_pos)
+        super_create(name, start_pos)
+        self.ship_info = {}
+        return self
+    end
+
+    function self.update_info(info)
+        self.ship_info = info
+    end
+
+    function self.get_info()
+        return self.ship_info
+    end
 
     return self
 end
@@ -79,16 +87,15 @@ function component.hull()
 
     --- @param name string
     --- @param start_pos table Vector
-    --- @param sensor_id string
     --- @param relay table Peripheral
     --- @param forward string|table string if only 1 side, otherwise a table of sides.
     --- @param left string|table
     --- @param right string|table
     --- @param reverse string|table
     --- @return table
-    function self.create(name, start_pos, sensor_id,
+    function self.create(name, start_pos,
                          relay, forward, left, right, reverse)
-        super_create(name, start_pos, sensor_id)
+        super_create(name, start_pos)
         self.relay = relay -- Peripheral
         self.forward = forward
         self.left = left           -- These can be tables if there's multiple links
@@ -197,13 +204,12 @@ function component.turret()
 
     --- @param name string
     --- @param start_pos table Vector
-    --- @param sensor_id string
     --- @param relay table Peripheral
     --- @param rotation_controller table Peripheral for rotating the turret precisely.
     --- @return table
-    function self.create(name, start_pos, sensor_id,
+    function self.create(name, start_pos,
                          relay, rotation_controller)
-        super_create(name, start_pos, sensor_id)
+        super_create(name, start_pos)
         self.relay = relay                       -- Peripheral
         self.rotational_controller = rotation_controller -- Peripheral
         self.weapons = {}

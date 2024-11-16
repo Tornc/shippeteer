@@ -45,7 +45,7 @@ function networking.remove_old_packets()
     end
 end
 
-function networking.send_message(message)
+function networking.send_packet(message)
     local packet = {
         ["id"] = my_id,
         ["time"] = utils.current_time_seconds(),
@@ -70,8 +70,12 @@ function networking.get_inbox()
     return inbox
 end
 
-function networking.get_message(id)
+function networking.get_packet(id)
     return inbox[id]
+end
+
+function networking.get_message(id)
+    return inbox[id] and inbox[id]["message"]
 end
 
 return networking
