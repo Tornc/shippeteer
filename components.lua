@@ -67,8 +67,6 @@ local function movable()
         end
 
         traverse_and_collect(self)
-
-        if utils.len_d(fields) == 0 then error("No such fields found.", 2) end
         return fields
     end
 
@@ -117,7 +115,7 @@ local function weapon()
     end
 
     function self.get_links()
-        return self.links()
+        return self.links
     end
 
     --- This is dumb stuff
@@ -144,6 +142,11 @@ local function continuous_weapon()
         return self
     end
 
+    --- @return integer
+    function self.get_fire_rate()
+        return self.fire_rate
+    end
+
     return self
 end
 
@@ -161,6 +164,11 @@ local function non_continuous_weapon()
         self.time_last_fired = utils.current_time_seconds()
         self.type = "non_continuous"
         return self
+    end
+
+    --- @return number
+    function self.get_reload_time()
+        return self.reload_time
     end
 
     --- @return number

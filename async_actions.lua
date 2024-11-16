@@ -70,10 +70,10 @@ function async_actions.update()
 end
 
 --- Coroutine-friendly version of os.sleep().
---- @param duration number The duration to pause in seconds.
+--- @param duration number? The duration to yield in seconds. If nil, yield once.
 function async_actions.pause(duration)
     if not coroutine.running() then return end
-    local end_time = utils.current_time_seconds() + duration
+    local end_time = utils.current_time_seconds() + (duration or 0)
     repeat
         coroutine.yield()
     until utils.current_time_seconds() > end_time
@@ -81,7 +81,7 @@ end
 
 --- Pause code execution of a thread until all the given actions have been terminated.
 --- @param ... table A variable number of actions to wait on.
-function async_actions.pause_until(...)
+function async_actions.pause_until_terminated(...)
     if not coroutine.running() then return end
     repeat
         local all_completed = true
