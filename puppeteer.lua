@@ -48,7 +48,6 @@ function puppeteer.path_move_to(comp, waypoints, timeout)
     end, timeout)
 end
 
---- comment
 --- @param comp any
 --- @param target table Vector or component
 --- @param timeout any
@@ -56,7 +55,6 @@ function puppeteer.aim_at(comp, target, timeout)
     error("Not implemented.")
 end
 
---- comment
 --- @param comp any
 --- @param target table Vector or component
 --- @param timeout any
@@ -78,11 +76,11 @@ local function fire_continuous(weapon, duration)
     -- Table being passed by reference is really covering my ass here.
     assert(weapon.get_type() == "continuous", "Weapon is not continuous!")
     return async.action().create(function()
-        local router = weapon.get_red_router()
+        local relay = weapon.get_relay()
         local links = utils.ensure_is_table(weapon.get_links())
-        for _, link in pairs(links) do router.setAnalogOutput(link, weapon.get_fire_rate()) end
+        for _, link in pairs(links) do relay.setAnalogOutput(link, weapon.get_fire_rate()) end
         async.pause(duration)
-        for _, link in pairs(links) do router.setOutput(link, false) end
+        for _, link in pairs(links) do relay.setOutput(link, false) end
     end)
 end
 
@@ -98,12 +96,12 @@ local function fire_non_continuous(weapon, end_time)
             async.pause()
         end
         -- Firing sequence.
-        local router = weapon.get_red_router()
+        local relay = weapon.get_relay()
         local links = utils.ensure_is_table(weapon.get_links())
-        for _, link in pairs(links) do router.setOutput(link, true) end
+        for _, link in pairs(links) do relay.setOutput(link, true) end
         weapon.set_time_last_fired(utils.current_time_seconds())
         async.pause(0.25) -- Just on/off shenanigans.
-        for _, link in pairs(links) do router.setOutput(link, false) end
+        for _, link in pairs(links) do relay.setOutput(link, false) end
     end)
 end
 
