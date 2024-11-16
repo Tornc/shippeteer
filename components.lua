@@ -103,8 +103,9 @@ end
 local function weapon()
     local self = setmetatable({}, {})
 
-    function self.create(name, links)
+    function self.create(name, redrouter, links)
         self.name = name
+        self.redrouter = redrouter
         self.links = links
         self.type = nil
         return self
@@ -112,6 +113,10 @@ local function weapon()
 
     function self.get_name()
         return self.name
+    end
+
+    function self.get_red_router()
+        return self.redrouter
     end
 
     function self.get_links()
@@ -132,11 +137,12 @@ local function continuous_weapon()
     local super_create = self.create
 
     --- @param name string
+    --- @param redrouter table Peripheral
     --- @param links string|table
     --- @param fire_rate integer
     --- @return table
-    function self.create(name, links, fire_rate)
-        super_create(name, links)
+    function self.create(name, redrouter, links, fire_rate)
+        super_create(name, redrouter, links)
         self.fire_rate = fire_rate
         self.type = "continuous"
         return self
@@ -155,11 +161,12 @@ local function non_continuous_weapon()
     local super_create = self.create
 
     --- @param name string
+    --- @param redrouter table Peripheral
     --- @param links string|table
     --- @param reload_time number
     --- @return table
-    function self.create(name, links, reload_time)
-        super_create(name, links)
+    function self.create(name, redrouter, links, reload_time)
+        super_create(name, redrouter, links)
         self.reload_time = reload_time
         self.time_last_fired = utils.current_time_seconds()
         self.type = "non_continuous"
@@ -209,9 +216,9 @@ function component.turret()
     --- @param cooldown_firerate number cooldown (in seconds) applies to is_continuous `false`, firerate applies to `true`.
     function self.add_weapon(name, links, is_continuous, cooldown_firerate)
         if is_continuous then
-            table.insert(self.weapons, continuous_weapon().create(name, links, cooldown_firerate))
+            table.insert(self.weapons, continuous_weapon().create(name, self.redrouter, links, cooldown_firerate))
         else
-            table.insert(self.weapons, non_continuous_weapon().create(name, links, cooldown_firerate))
+            table.insert(self.weapons, non_continuous_weapon().create(name, self.redrouter, links, cooldown_firerate))
         end
     end
 

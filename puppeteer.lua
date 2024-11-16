@@ -66,10 +66,7 @@ end
 function puppeteer.lock_on(comp, target, timeout)
     error("Not implemented.")
     return async.action().create(function()
-        error("Not implemented.")
-        while true do
-
-        end
+        -- use is_vector() to distinguish between a set of coords and a vehicle (pos requires updating constantly)
     end, timeout)
 end
 
@@ -81,10 +78,11 @@ local function fire_continuous(weapon, duration)
     -- Table being passed by reference is really covering my ass here.
     assert(weapon.get_type() == "continuous", "Weapon is not continuous!")
     return async.action().create(function()
+        local router = weapon.get_red_router()
         local links = utils.ensure_is_table(weapon.get_links())
-        for _, link in pairs(links) do rs.setAnalogOutput(link, weapon.get_fire_rate()) end
+        for _, link in pairs(links) do router.setAnalogOutput(link, weapon.get_fire_rate()) end
         async.pause(duration)
-        for _, link in pairs(links) do rs.setOutput(link, false) end
+        for _, link in pairs(links) do router.setOutput(link, false) end
     end)
 end
 
@@ -100,11 +98,12 @@ local function fire_non_continuous(weapon, end_time)
             async.pause()
         end
         -- Firing sequence.
+        local router = weapon.get_red_router()
         local links = utils.ensure_is_table(weapon.get_links())
-        for _, link in pairs(links) do rs.setOutput(link, true) end
+        for _, link in pairs(links) do router.setOutput(link, true) end
         weapon.set_time_last_fired(utils.current_time_seconds())
         async.pause(0.25) -- Just on/off shenanigans.
-        for _, link in pairs(links) do rs.setOutput(link, false) end
+        for _, link in pairs(links) do router.setOutput(link, false) end
     end)
 end
 
@@ -127,11 +126,7 @@ local function select_fire_action(weapon, duration)
         act = fire_continuous(weapon, duration)
     end
     if weapon_type == "non_continuous" then
-        if not duration then
-            act = fire_non_continuous(weapon)
-        else
-            act = fire_non_continuous_duration(weapon, duration)
-        end
+        act = duration and fire_non_continuous_duration(weapon, duration) or fire_non_continuous(weapon)
     end
     return act
 end
@@ -171,6 +166,7 @@ end
 --- @param fire_function function Silly detail: `fire_function` can also be something completely unrelated to `fire()`.
 --- @param fire_parameters table Parameters of the fire function in the form of: {p1, p2, ...}.
 --- @param timeout number?
+--- @return table
 function puppeteer.fire_at(comp, target, fire_function, fire_parameters, timeout)
     return async.action().create(function()
         async.pause_until_terminated(puppeteer.aim_at(comp, target))
