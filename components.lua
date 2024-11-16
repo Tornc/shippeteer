@@ -23,16 +23,21 @@ function component.ship()
         return self
     end
 
-    --- @param comp table
-    function self.add_parent_component(comp)
-        self.parent = comp
-    end
-
     --- @param ... table One or more components
-    --- @TODO PREVENT CIRCULAR REFERENCING!
     function self.add_child_component(...)
+        local function is_circular_reference(comp, target)
+            if comp == target then return true end
+            for _, child in pairs(comp.child_components or {}) do
+                if is_circular_reference(child, target) then return true end
+            end
+            return false
+        end
+
         for _, comp in pairs({ ... }) do
+            assert(not is_circular_reference(comp, self),
+                "Circular reference: " .. comp.get_name() .. " can't be a child of " .. self.get_name() .. "!")
             table.insert(self.child_components, comp)
+            comp.parent = self
         end
     end
 
@@ -40,10 +45,14 @@ function component.ship()
         return self.name
     end
 
+    function self.get_parent()
+        return self.parent
+    end
+
     --- Returns the value of the queried field of the component and all its children.
     --- @param field_name string It's great that `field = ...` is equivalent to `["field"] = ...`
     --- @return table result `{name1 = field1, name2 = field2, ...}`
-    function self.get_field(field_name)
+    function self.get_field_all(field_name)
         local fields = {}
 
         local function traverse_and_collect(comp)
@@ -56,6 +65,7 @@ function component.ship()
         traverse_and_collect(self)
         return fields
     end
+
     return self
 end
 
@@ -98,7 +108,7 @@ function component.hull()
         super_create(name, start_pos)
         self.relay = relay -- Peripheral
         self.forward = forward
-        self.left = left           -- These can be tables if there's multiple links
+        self.left = left   -- These can be tables if there's multiple links
         self.right = right
         self.reverse = reverse
         return self
@@ -210,7 +220,7 @@ function component.turret()
     function self.create(name, start_pos,
                          relay, rotation_controller)
         super_create(name, start_pos)
-        self.relay = relay                       -- Peripheral
+        self.relay = relay                               -- Peripheral
         self.rotational_controller = rotation_controller -- Peripheral
         self.weapons = {}
         return self

@@ -181,7 +181,7 @@ end
 --- @TODO: Swap print() out for commented code.
 function puppeteer.freeze(comp)
     return async.action().create(function()
-        for _, name in pairs(comp.get_field("name")) do
+        for _, name in pairs(comp.get_field_all("name")) do
             print("vs " .. name .. " set-static true")
             -- commands.exec("vs " .. name .. " set-static true")
         end
@@ -194,7 +194,7 @@ end
 --- @TODO: Swap print() out for commented code.
 function puppeteer.unfreeze(comp)
     return async.action().create(function()
-        for _, name in pairs(comp.get_field("name")) do
+        for _, name in pairs(comp.get_field_all("name")) do
             print("vs " .. name .. " set-static false")
             -- commands.exec("vs " .. name .. " set-static false")
         end
@@ -208,7 +208,7 @@ end
 function puppeteer.reset(comp)
     return async.action().create(function()
         async.pause_until_terminated(puppeteer.unfreeze(comp))
-        for name, pos in pairs(comp.get_field("start_pos")) do
+        for name, pos in pairs(comp.get_field_all("start_pos")) do
             print("vs " .. name .. " teleport " .. pos.x .. " " .. pos.y .. " " .. pos.z)
             -- commands.exec("vs " .. name .. " teleport " .. pos.x .. " " .. pos.y .. " " .. pos.z)
         end

@@ -8,7 +8,7 @@ local utils = require("utils")
 
 local networking = setmetatable({}, {})
 
-local TOO_OLD_TIME = 0.5
+local PACKET_DECAY_TIME = 0.5
 
 local modem
 local incoming_channel, outgoing_channel
@@ -39,12 +39,14 @@ end
 function networking.remove_old_packets()
     local current_time = utils.current_time_seconds()
     for key, packet in pairs(inbox) do
-        if current_time > packet["time"] + TOO_OLD_TIME then
+        if current_time > packet["time"] + PACKET_DECAY_TIME then
             inbox[key] = nil
         end
     end
 end
 
+--- Wraps and transmits the given message inside a dict with format: `{id = ..., time = ..., message = your_message}`
+--- @param message any
 function networking.send_packet(message)
     local packet = {
         ["id"] = my_id,
@@ -54,26 +56,35 @@ function networking.send_packet(message)
     modem.transmit(outgoing_channel, incoming_channel, packet)
 end
 
+--- @param m table Peripheral
 function networking.set_modem(m)
     modem = m
 end
 
+--- @param incoming integer
+--- @param outgoing integer
 function networking.set_channels(incoming, outgoing)
     incoming_channel, outgoing_channel = incoming, outgoing
 end
 
+--- @param id string
 function networking.set_id(id)
     my_id = id
 end
 
+--- @return table inbox All incoming messages
 function networking.get_inbox()
     return inbox
 end
 
+--- @param id string
+--- @return table
 function networking.get_packet(id)
     return inbox[id]
 end
 
+--- @param id string
+--- @return any
 function networking.get_message(id)
     return inbox[id] and inbox[id]["message"]
 end
