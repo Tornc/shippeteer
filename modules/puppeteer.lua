@@ -11,7 +11,8 @@ local pretty = require("cc.pretty")
 
 local puppeteer = setmetatable({}, {})
 
-local MAX_RPM = 64
+local MAX_RPM = 64             -- Maybe set it to 128.
+local YAW_DEGREE_THRESHOLD = 1 -- Is 1 degree too much or too little?
 
 function puppeteer.init(dt)
     puppeteer.dt = dt
@@ -19,6 +20,9 @@ function puppeteer.init(dt)
 end
 
 --- @TODO: confirm if this actually works correctly in-game.
+--- @param comp_pos table Vector
+--- @param target_pos table Vector
+--- @return number result In degrees
 local function calculate_yaw(comp_pos, target_pos)
     local delta_x = target_pos.x - comp_pos.x
     local delta_z = target_pos.z - comp_pos.z
@@ -53,13 +57,61 @@ function puppeteer.path_move_to(comp, waypoints, timeout)
     end, timeout)
 end
 
+--- Note: This assumes everything is in degrees, not radians.
+--- @param desired_yaw number
+--- @param comp_info table
+--- @param rot_controller table Peripheral
+--- @param threshold number? Optional
+--- @return boolean?
+local function manage_target_rpm(desired_yaw, comp_info, rot_controller, threshold)
+    local current_yaw = comp_info["orientation"]["yaw"]
+    local delta_yaw = (desired_yaw - current_yaw + 180) % 360 - 180
+    local omega_yaw = comp_info["omega"]["yaw"] * puppeteer.dt / 20 -- math.deg(ship.getOmega().y); degrees/tick
+    local new_rpm = utils.round(lqr.get_turret_yaw_rpm(delta_yaw, omega_yaw))
+
+    -- Note: It's very important to round the rpm, as otherwise it'd be the rpm checks wouldn't work
+    -- properly, leading to this just about never returning true and lots of unnecessary peripheral calls.
+    if threshold and delta_yaw < threshold and new_rpm == 0 then return true end
+    if rot_controller.getTargetSpeed() ~= new_rpm then
+        utils.run_async(
+            rot_controller.setTargetSpeed,
+            utils.clamp(new_rpm, -MAX_RPM, MAX_RPM)
+        )
+    end
+end
+
 --- Rotates the turret until it faces the target.
---- @param comp any
+--- @param comp table
 --- @param target table Vector or component
---- @param timeout any
+--- @param timeout number?
 function puppeteer.aim_at(comp, target, timeout)
     error("Not implemented.")
     return async.action().create(function()
+        local target_pos
+        local is_vec = is_vector(target)
+        if is_vec then target_pos = target end
+        local rot_controller = comp.get_rotational_controller()
+        local is_done
+        repeat
+            local comp_info = comp.get_info()
+            local comp_pos = utils.tbl_to_vec(comp_info["position"])
+            if not comp_info then goto continue end
+            if not is_vec then
+                local target_comp_info = target.get_info()
+                if not target_comp_info then goto continue end
+                target_pos = utils.tbl_to_vec(target_comp_info["position"])
+            end
+
+            is_done = manage_target_rpm(
+                calculate_yaw(comp_pos, target_pos),
+                comp_info,
+                rot_controller,
+                YAW_DEGREE_THRESHOLD
+            )
+
+            ::continue::
+            async.pause()
+        until is_done
     end, timeout)
 end
 
@@ -74,33 +126,22 @@ end
 --- @return table
 function puppeteer.lock_on(comp, target, timeout)
     return async.action().create(function()
-        local is_target_vector = is_vector(target)
+        local target_pos
+        local is_vec = is_vector(target)
+        if is_vec then target_pos = target end
         local rot_controller = comp.get_rotational_controller()
+
         while true do
             local comp_info = comp.get_info()
-            if not comp_info then goto continue end
-
             local comp_pos = utils.tbl_to_vec(comp_info["position"])
-            -- Determine if target is a set of coordinates or a component.
-            local target_pos = is_target_vector and target or (function()
+            if not comp_info then goto continue end
+            if not is_vec then
                 local target_comp_info = target.get_info()
-                return target_comp_info and utils.tbl_to_vec(target_comp_info["position"]) or nil
-            end)()
-            if not target_pos then goto continue end
-
-            -- Note: This assumes everything is in degrees, not radians.
-            local desired_yaw = calculate_yaw(comp_pos, target_pos)
-            local current_yaw = comp_info["orientation"]["yaw"]
-            local delta_yaw = (desired_yaw - current_yaw + 180) % 360 - 180
-            local omega_yaw = comp_info["omega"]["yaw"] * puppeteer.dt / 20 -- Note: math.deg(ship.getOmega().y)
-            local new_rpm = lqr.get_turret_yaw_rpm(delta_yaw, omega_yaw)
-
-            if rot_controller.getTargetSpeed() ~= new_rpm then
-                utils.run_async(
-                    rot_controller.setTargetSpeed,
-                    utils.round(utils.clamp(new_rpm, -MAX_RPM, MAX_RPM))
-                )
+                if not target_comp_info then goto continue end
+                target_pos = utils.tbl_to_vec(target_comp_info["position"])
             end
+
+            manage_target_rpm(calculate_yaw(comp_pos, target_pos), comp_info, rot_controller)
 
             ::continue::
             async.pause()
@@ -112,8 +153,28 @@ end
 --- @param comp table Component
 --- @param timeout number?
 function puppeteer.turret_to_idle(comp, timeout)
-    error("Not implemented.")
     return async.action().create(function()
+        local parent = comp.get_parent()
+        assert(parent ~= nil, "Component " .. comp.get_name() .. " has no parent!")
+        local rot_controller = comp.get_rotational_controller()
+        local is_done
+        repeat
+            local comp_info = comp.get_info()
+            local parent_info = parent.get_info()
+
+            if not comp_info then goto continue end
+            if not parent_info then goto continue end
+
+            is_done = manage_target_rpm(
+                parent_info["orientation"]["yaw"],
+                comp_info,
+                rot_controller,
+                YAW_DEGREE_THRESHOLD
+            )
+
+            ::continue::
+            async.pause()
+        until is_done
     end, timeout)
 end
 

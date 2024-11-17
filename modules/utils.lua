@@ -88,13 +88,12 @@ function utils.len_d(dict)
 end
 
 --- Rounds a number to the nearest integer or to a specified decimal place.
---- @param number number The number to round.
---- @param decimal ?number The number of decimal places to round to. If omitted, rounds to the nearest integer.
---- @return integer|number? result The rounded number.
-function utils.round(number, decimal)
-    if not decimal then return math.floor(number + 0.5) end
-    local fmt_str = "%." .. decimal .. "f"
-    return tonumber(string.format(fmt_str, number))
+--- @param num number The number to round.
+--- @param decimal number? The number of decimal places to round to. If omitted, rounds to the nearest integer.
+--- @return integer|number result The rounded number.
+function utils.round(num, decimal)
+    local mult = 10 ^ (decimal or 0)
+    return math.floor(num * mult + 0.5) / mult
 end
 
 --- Rounds a number to the nearest increment.
