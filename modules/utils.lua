@@ -107,7 +107,7 @@ end
 
 --- Runs a function asynchronously using coroutines.
 --- @param func function The function to run asynchronously.
---- @param ... table Additional arguments to pass to the function.
+--- @param ... any Arguments of the function.
 function utils.run_async(func, ...)
     local args = { ... }
     local co = coroutine.create(

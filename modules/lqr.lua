@@ -4,36 +4,46 @@
     LQR CONTROLLER MODULE
 ]]
 
-local matrix = require "matrix"
+local matrix = require("matrix")
 
 local lqr = setmetatable({}, {})
 
 --[[ MATRIX VALUES ]]
 
-lqr.TUR_YAW_Q = matrix { -- State cost matrix
-    { 10, 0 },           -- Yaw error
-    { 0,  1 },           -- Yaw angular velocity
+local TUR_YAW_Q = matrix { -- State cost matrix
+    { 10, 0 },             -- Yaw error
+    { 0,  1 },             -- Yaw angular velocity
 }
-lqr.TUR_YAW_R = matrix { -- Control cost matrix
-    { 0.5 },             -- Yaw actuator
+local TUR_YAW_R = matrix { -- Control cost matrix
+    { 0.5 },               -- Yaw actuator
 }
-lqr.TUR_YAW_A = matrix { -- State dynamics matrix
-    { 0, 1 },            -- d(theta_y)/dt = omega_y
-    { 0, 0 },            -- d(omega_y)/dt = 0 (no direct influence)
+local TUR_YAW_A = matrix { -- State dynamics matrix
+    { 0, 1 },              -- d(theta_y)/dt = omega_y
+    { 0, 0 },              -- d(omega_y)/dt = 0 (no direct influence)
 }
-lqr.TUR_YAW_B = matrix { -- Control input matrix
-    { 0 },               -- No direct influence on theta_y
-    { 1 },               -- Control input u_y affects omega_y
+local TUR_YAW_B = matrix { -- Control input matrix
+    { 0 },                 -- No direct influence on theta_y
+    { 1 },                 -- Control input u_y affects omega_y
 }
 
 --[[ FUNCTIONS ]]
+
+function lqr.init(dt)
+    TUR_YAW_K = lqr.compute_gain(
+        TUR_YAW_Q,
+        TUR_YAW_R,
+        TUR_YAW_A,
+        TUR_YAW_B,
+        dt
+    )
+end
 
 --- @param Q table State cost matrix
 --- @param R table Control cost matrix
 --- @param A table State dynamics matrix
 --- @param B table Control input matrix
 --- @param dt number Interval between control inputs. (SLEEP_INTERVAL is a safe bet)
---- @return table
+--- @return table K Gain matrix
 function lqr.compute_gain(Q, R, A, B, dt)
     local function discretise(_A, _B, _dt)
         local Ad = matrix:new(matrix.rows(_A), "I") + _A * _dt
@@ -74,14 +84,13 @@ end
 
 --- @param yaw_error number
 --- @param omega_y number
---- @param K table Gain matrix, make sure it's the right one though.
 --- @return number
-function lqr.get_yaw_rpm(yaw_error, omega_y, K)
+function lqr.get_turret_yaw_rpm(yaw_error, omega_y)
     local state_matrix   = matrix {
         { yaw_error },
         { omega_y },
     }
-    local control_matrix = -(K * state_matrix)
+    local control_matrix = -(TUR_YAW_K * state_matrix)
     return matrix.getelement(control_matrix, 1, 1)
 end
 

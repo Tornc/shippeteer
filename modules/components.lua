@@ -238,6 +238,11 @@ function component.turret()
         end
     end
 
+    --- @return table rotational_controller Peripheral
+    function self.get_rotational_controller()
+        return self.rotational_controller
+    end
+
     --- @param name string Name of the weapon you want to query.
     --- @return table? weapon
     function self.get_weapon(name)
