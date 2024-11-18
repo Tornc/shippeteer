@@ -34,7 +34,7 @@ local SHIPYARD_DIRECTION
 
 local function init_settings()
     local sets = config.load(SETTINGS_FILE_PATH)
-    if not sets or arg[1] == string.lower(ARG_ASK_SETTINGS) then
+    if (not sets) or arg[1] == string.lower(ARG_ASK_SETTINGS) then
         -- No need for type conversion; info is all strings anyway.
         config.set_setting(
             config.ask_setting("Movable component name (id)?",
