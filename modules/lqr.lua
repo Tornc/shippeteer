@@ -1,10 +1,10 @@
 -- Written by Ton, with love. Feel free to modify, consider this under the MIT license.
 
+local matrix = require("matrix")
+
 --[[
     LQR CONTROLLER MODULE
 ]]
-
-local matrix = require("matrix")
 
 local lqr = setmetatable({}, {})
 

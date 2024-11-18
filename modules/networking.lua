@@ -1,14 +1,18 @@
 -- Written by Ton, with love. Feel free to modify, consider this under the MIT license.
 
+local utils = require("utils")
+
 --[[
     NETWORKING MODULE
 ]]
 
-local utils = require("utils")
-
 local networking = setmetatable({}, {})
 
+--[[ CONSTANTS / SETTINGS ]]
+
 local PACKET_DECAY_TIME = 0.5
+
+--[[ STATE VARIABLES ]]
 
 local modem
 local incoming_channel, outgoing_channel

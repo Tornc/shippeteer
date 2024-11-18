@@ -1,11 +1,10 @@
 -- Written by Ton, with love. Feel free to modify, consider this under the MIT license.
 
+local utils = require("utils")
+
 --[[
     SHIP COMPONENTS MODULE
 ]]
-
-local utils = require("utils")
-local pretty = require("cc.pretty")
 
 local component = setmetatable({}, {})
 
@@ -112,6 +111,19 @@ function component.hull()
         self.right = right
         self.reverse = reverse
         return self
+    end
+
+    function self.get_relay()
+        return self.relay
+    end
+
+    function self.get_controls()
+        return {
+            ["forward"] = self.forward,
+            ["left"] = self.left,
+            ["right"] = self.right,
+            ["reverse"] = self.reverse,
+        }
     end
 
     return self

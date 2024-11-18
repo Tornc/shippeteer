@@ -1,10 +1,10 @@
 -- Written by Ton, with love. Feel free to modify, consider this under the MIT license.
 
+local utils = require("utils")
+
 --[[
     ASYNC ACTIONS MODULE
 ]]
-
-local utils = require("utils")
 
 local async_actions = setmetatable({}, {})
 local actions = {} -- A register of all the actions that have been created.
