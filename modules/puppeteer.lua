@@ -26,6 +26,14 @@ function puppeteer.init(dt)
     lqr.init(puppeteer.dt)
 end
 
+function puppeteer.test(a, b, line, timeout)
+    return async.action().create(function()
+        print(a, b, line, timeout)
+        async.pause(10)
+        print(a + b)
+    end, line, timeout)
+end
+
 --- @TODO: confirm if this actually works correctly in-game.
 --- @param comp_pos table Vector
 --- @param target_pos table Vector
@@ -149,8 +157,10 @@ local function manage_target_rpm(desired_yaw, comp_info, rot_controller, thresho
     local omega_yaw = comp_info["omega"]["yaw"] * puppeteer.dt / 20 -- math.deg(ship.getOmega().y); degrees/tick
     local new_rpm = utils.round(lqr.get_turret_yaw_rpm(delta_yaw, omega_yaw))
 
-    -- Note: It's very important to round the rpm, as otherwise it'd be the rpm checks wouldn't work
-    -- properly, leading to this just about never returning true and lots of unnecessary peripheral calls.
+    -- Note: It's very important to round the rpm, as otherwise  the rpm checks wouldn't work properly,
+    -- leading to this just about never returning true and lots of unnecessary peripheral calls. This
+    -- is especially bad here, because rot_controller calls freeze the script (yielding), requiring
+    -- creating a coroutine for every call.
     if threshold and delta_yaw < threshold and new_rpm == 0 then return true end
     if rot_controller.getTargetSpeed() ~= new_rpm then
         utils.run_async(
@@ -262,8 +272,7 @@ function puppeteer.turret_to_idle(comp, line, timeout)
             local comp_info = comp.get_info()
             local parent_info = parent.get_info()
 
-            if not comp_info then goto continue end
-            if not parent_info then goto continue end
+            if not (comp_info and parent_info) then goto continue end
 
             is_done = manage_target_rpm(
                 parent_info["orientation"]["yaw"],
