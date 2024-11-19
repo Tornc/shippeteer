@@ -1,5 +1,6 @@
 -- Written by Ton, with love. Feel free to modify, consider this under the MIT license.
 
+-- See: https://github.com/davidm/lua-matrix/blob/master/lua/matrix.lua
 local matrix = require("matrix")
 
 --[[
@@ -51,7 +52,8 @@ function lqr.compute_gain(Q, R, A, B, dt)
         return Ad, Bd
     end
 
-    --- I don't want to look at this math ever again.
+    -- I don't want to look at this math ever again.
+    -- See https://en.wikipedia.org/wiki/Algebraic_Riccati_equation for more depression.
     local function solve_discrete_Riccati(_A, _B, _Q, _R)
         local max_iterations = 100
         local tolerance = 1e-9

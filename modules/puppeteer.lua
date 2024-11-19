@@ -13,9 +13,11 @@ local puppeteer = setmetatable({}, {})
 
 --[[ CONSTANTS / SETTINGS ]]
 
-local MAX_RPM = 64             -- Maybe set it to 128.
-local TURRET_YAW_THRESHOLD = 1 -- Is 1 degree too much or too little?
-local HULL_YAW_THRESHOLD = 5   -- Once again, too much? Too little?
+local MAX_RPM = 64                  -- Maybe set it to 128.
+local TURRET_YAW_THRESHOLD = 1      -- Is 1 degree too much or too little?
+local HULL_YAW_THRESHOLD = 3        -- Test this stuff
+local HULL_YAW_ROTATE_THRESHOLD = 6
+local ARRIVAL_DISTANCE_THESHOLD = 3 -- idk
 
 --[[ FUNCTIONS ]]
 
@@ -34,6 +36,16 @@ local function calculate_yaw(comp_pos, target_pos)
     return math.deg(math.atan2(delta_z, delta_x))
 end
 
+--- @param pos1 table Vector
+--- @param pos2 table Vector
+--- @param threshold number
+--- @return boolean
+local function has_arrived(pos1, pos2, threshold)
+    if pos1 == nil or pos2 == nil then return false end
+    if (pos1 - pos2):length() < threshold then return true end
+    return false
+end
+
 --- Only works because Vector has the metamethod(?) __name.
 --- @param var any
 --- @return boolean
@@ -41,53 +53,77 @@ local function is_vector(var)
     return type(var) == "table" and getmetatable(var).__name == "vector"
 end
 
+--- # IMPORTANT: this only works for tracked vehicles, not wheeled vehicles!
 --- @param comp table
 --- @param pos table Vector
 --- @param reverse boolean?
+--- @param line integer?
 --- @param timeout number?
 --- @return table
-function puppeteer.move_to(comp, pos, reverse, timeout)
+function puppeteer.move_to(comp, pos, reverse, line, timeout)
     return async.action().create(function()
         local relay = comp.get_relay()
-        local controls
-        for key, control in pairs(comp.get_controls()) do
-            controls[key] = utils.ensure_is_table(control)
-        end
+        local controls = comp.get_controls()
+        -- We do this mildly convoluted 'intermediary' table step to reduce the
+        -- amount of (relay) peripheral calls needed.
+        local control_states = {}
+        while true do
+            -- Assume no movement initially.
+            for key, _ in pairs(controls) do control_states[key] = false end
 
-        local has_arrived
-        repeat
             local comp_info = comp.get_info()
             if comp_info then
                 local comp_pos = utils.tbl_to_vec(comp_info["position"])
+                if has_arrived(comp_pos, pos, ARRIVAL_DISTANCE_THESHOLD) then break end
+                -- We flip the desired_yaw if we're going in reverse, because the rear
+                -- must face towards the destination.
                 local desired_yaw = calculate_yaw(comp_pos, pos)
                 desired_yaw = reverse and (desired_yaw + 180) % 360 or desired_yaw
                 local current_yaw = comp_info["orientation"]["yaw"]
                 local delta_yaw = (desired_yaw - current_yaw + 180) % 360 - 180
 
-                if delta_yaw < HULL_YAW_THRESHOLD then
-                    -- we either go forwards or reverse
-
-                    -- for _, link in pairs(links) do relay.setOutput(link, true) end
-                    -- for _, link in pairs(links) do relay.setOutput(link, false) end
+                -- This dual threshold shenanigans is to avoid constantly turning if
+                -- delta_yaw inches _just_ above the threshold for turning.
+                -- Therefore, the threshold for deciding when to rotate is higher, but
+                -- if we are actually rotating, the threshold to stop is lower.
+                if math.abs(delta_yaw) > HULL_YAW_ROTATE_THRESHOLD or
+                    (
+                        math.abs(delta_yaw) > HULL_YAW_THRESHOLD and
+                        (control_states["left"] or control_states["right"])
+                    )
+                then
+                    control_states["right"] = delta_yaw >= 0
+                    control_states["left"] = delta_yaw < 0
                 else
-                    if delta_yaw > 0 then
-                        -- go right
-                    else
-                        -- go left
-                    end
+                    control_states["reverse"] = reverse
+                    control_states["forward"] = not reverse
                 end
             end
 
+            -- Actual peripheral calls to set the redstone links.
+            for control, links in pairs(controls) do
+                for _, link in pairs(utils.ensure_is_table(links)) do
+                    relay.setOutput(link, control_states[control])
+                end
+            end
             async.pause()
-        until has_arrived
-    end, timeout)
+        end
+
+        -- Required because loop termination happens before the peripheral calls.
+        for _, links in pairs(controls) do
+            for _, link in pairs(utils.ensure_is_table(links)) do
+                relay.setOutput(link, false)
+            end
+        end
+    end, line, timeout)
 end
 
 --- @param comp table
 --- @param waypoints table Format: `{vector1:, {vector2, true}, ...}`
+--- @param line integer?
 --- @param timeout number?
 --- @return table
-function puppeteer.path_move_to(comp, waypoints, timeout)
+function puppeteer.path_move_to(comp, waypoints, line, timeout)
     return async.action().create(function()
         for _, waypoint in pairs(waypoints) do
             local pos, reverse
@@ -98,7 +134,7 @@ function puppeteer.path_move_to(comp, waypoints, timeout)
             end
             async.pause_until_terminated(puppeteer.move_to(comp, pos, reverse))
         end
-    end, timeout)
+    end, line, timeout)
 end
 
 --- Note: This assumes everything is in degrees, not radians.
@@ -127,9 +163,10 @@ end
 --- Rotates the turret until it faces the target.
 --- @param comp table
 --- @param target table Vector or component
+--- @param line integer?
 --- @param timeout number?
 --- @return table
-function puppeteer.aim_at(comp, target, timeout)
+function puppeteer.aim_at(comp, target, line, timeout)
     return async.action().create(function()
         local target_pos
         local is_vec = is_vector(target)
@@ -156,7 +193,7 @@ function puppeteer.aim_at(comp, target, timeout)
             ::continue::
             async.pause()
         until is_done
-    end, timeout)
+    end, line, timeout)
 end
 
 --- Rotates the turret such that it faces the target and keeps it that way until told otherwise. Example usage:
@@ -168,9 +205,10 @@ end
 --- ```
 --- @param comp table Component
 --- @param target table Vector or component
+--- @param line integer?
 --- @param timeout number?
 --- @return table
-function puppeteer.lock_on(comp, target, timeout)
+function puppeteer.lock_on(comp, target, line, timeout)
     -- This function is identical to aim_at, except for the fact that YAW_DEGREE_THRESHOLD is
     -- not needed. Maybe rewrite both to reduce code duplication.
     return async.action().create(function()
@@ -182,7 +220,7 @@ function puppeteer.lock_on(comp, target, timeout)
         while true do
             local comp_info = comp.get_info()
             local comp_pos = comp_info and utils.tbl_to_vec(comp_info["position"])
-            if not comp_info then goto continue end
+            if not comp_info then goto continue end -- _sigh_
             if not is_vec then
                 local target_comp_info = target.get_info()
                 if not target_comp_info then goto continue end
@@ -194,24 +232,27 @@ function puppeteer.lock_on(comp, target, timeout)
             ::continue::
             async.pause()
         end
-    end, timeout)
+    end, line, timeout)
 end
 
 --- Use after terminating lock_on()
 --- @param comp table Component
+--- @param line integer?
+--- @param timeout number?
 --- @return table
-function puppeteer.stop_rot_controller(comp)
+function puppeteer.stop_rot_controller(comp, line, timeout)
     return async.action().create(function()
         local rot_controller = comp.get_rotational_controller()
         utils.run_async(rot_controller.setTargetSpeed, 0)
-    end)
+    end, line, timeout)
 end
 
 --- Rotates the turret until its yaw is the same as its parent.
 --- @param comp table Component
+--- @param line integer?
 --- @param timeout number?
 --- @return table
-function puppeteer.turret_to_idle(comp, timeout)
+function puppeteer.turret_to_idle(comp, line, timeout)
     return async.action().create(function()
         local parent = comp.get_parent()
         assert(parent ~= nil, "Component " .. comp.get_name() .. " has no parent!")
@@ -234,7 +275,7 @@ function puppeteer.turret_to_idle(comp, timeout)
             ::continue::
             async.pause()
         until is_done
-    end, timeout)
+    end, line, timeout)
 end
 
 --- @param weapon table
@@ -303,6 +344,9 @@ local function select_fire_action(weapon, duration)
     return act
 end
 
+--- @param comp table
+--- @param duration number
+--- @return table
 local function fire_all(comp, duration)
     return async.action().create(function()
         local sub_actions = {}
@@ -317,9 +361,10 @@ end
 --- @param comp table
 --- @param weapon_name string? If nil, then fire all weapons.
 --- @param duration number Required if your component has a continuous weapon.
+--- @param line integer?
 --- @param timeout number?
 --- @return table
-function puppeteer.fire(comp, weapon_name, duration, timeout)
+function puppeteer.fire(comp, weapon_name, duration, line, timeout)
     return async.action().create(function()
         local act
         if not weapon_name then
@@ -330,23 +375,24 @@ function puppeteer.fire(comp, weapon_name, duration, timeout)
             act = select_fire_action(weapon, duration)
         end
         async.pause_until_terminated(act)
-    end, timeout)
+    end, line, timeout)
 end
 
 --- @param comp table
 --- @param target table Vector or component
 --- @param fire_function function Silly detail: `fire_function` can also be something completely unrelated to `fire()`.
 --- @param fire_parameters table Parameters of the fire function in the form of: {p1, p2, ...}.
+--- @param line integer?
 --- @param timeout number?
 --- @return table
-function puppeteer.fire_at(comp, target, fire_function, fire_parameters, timeout)
+function puppeteer.fire_at(comp, target, fire_function, fire_parameters, line, timeout)
     return async.action().create(function()
         async.pause_until_terminated(puppeteer.aim_at(comp, target))
         local lock_on_action = puppeteer.lock_on(comp, target)
         local fire_action = fire_function(table.unpack(fire_parameters))
         async.pause_until_terminated(fire_action)
         lock_on_action.terminate()
-    end, timeout)
+    end, line, timeout)
 end
 
 --- `/vs ship set-static true` for component and all its children.

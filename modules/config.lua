@@ -42,13 +42,13 @@ function config.set_setting(var, name, type_conversion_func)
 end
 
 --- @param path string
-function config.save(path)
+function config.save_settings(path)
     if not settings.save(path) then error("Failed to save settings!") end
 end
 
 --- Note that this returns _all_ settings, including OS-specific stuff.
 --- @return table? settings
-function config.load(path)
+function config.get_settings(path)
     if not settings.load(path) then return end
 
     for _, name in pairs(settings.getNames()) do

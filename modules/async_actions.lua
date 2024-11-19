@@ -13,6 +13,10 @@ local function register_action(action)
     table.insert(actions, action)
 end
 
+function async_actions.get_actions()
+    return actions
+end
+
 --- Creates and manages asynchronous actions.
 function async_actions.action()
     local self = setmetatable({}, {})
@@ -24,10 +28,12 @@ function async_actions.action()
 
     --- Creates a new asynchronous action.
     --- @param func function The function to run as a coroutine.
+    --- @param line integer? The line of code that created the action in the main script.
     --- @param timeout number? After how many seconds it will give a timeout error.
     --- @return table action The created action instance.
-    function self.create(func, timeout)
+    function self.create(func, line, timeout)
         self.func = func
+        self.line = line
         self.timeout = timeout or 9999999 -- or in 2777 hrs
         self.state = STATES.RUNNING
         self.end_time = utils.current_time_seconds() + self.timeout
@@ -44,7 +50,7 @@ function async_actions.action()
         local _, err = coroutine.resume(self.co)
 
         if err then error(tostring(err)) end
-        if utils.current_time_seconds() > self.end_time then error("Action #" .. utils.index_of(actions, self) .. " has timed out!") end
+        if utils.current_time_seconds() > self.end_time then error("Action on line " .. tostring(self.line) .. " has timed out!") end
         if coroutine.status(self.co) == "dead" then self.terminate() end
     end
 

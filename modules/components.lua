@@ -113,10 +113,12 @@ function component.hull()
         return self
     end
 
+    --- @return table
     function self.get_relay()
         return self.relay
     end
 
+    --- @return table
     function self.get_controls()
         return {
             ["forward"] = self.forward,
