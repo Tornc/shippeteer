@@ -2,6 +2,7 @@
 
 local async = require("async_actions")
 local lqr = require("lqr")
+local mpc = require("mpc")
 local utils = require("utils")
 local pretty = require("cc.pretty")
 
@@ -13,35 +14,27 @@ local puppeteer = setmetatable({}, {})
 
 --[[ CONSTANTS / SETTINGS ]]
 
-local MAX_RPM = 64                  -- Maybe set it to 128.
-local TURRET_YAW_THRESHOLD = 1      -- Is 1 degree too much or too little?
-local HULL_YAW_THRESHOLD = 3        -- Test this stuff
-local HULL_YAW_ROTATE_THRESHOLD = 6
-local ARRIVAL_DISTANCE_THESHOLD = 3 -- idk
+local MAX_RPM = 64
+local TURRET_YAW_THRESHOLD = 1
+local HULL_YAW_THRESHOLD = 1
+local HULL_YAW_ROTATE_THRESHOLD = 20
+local ARRIVAL_DISTANCE_THESHOLD = 4
 
 --[[ FUNCTIONS ]]
 
 function puppeteer.init(dt)
     puppeteer.dt = dt
-    lqr.init(puppeteer.dt)
+    lqr.init(1) -- I don't know why, but anything lower than 1 and it goes brokey.
 end
 
-function puppeteer.test(a, b, line, timeout)
-    return async.action().create(function()
-        print(a, b, line, timeout)
-        async.pause(10)
-        print(a + b)
-    end, line, timeout)
-end
-
---- @TODO: confirm if this actually works correctly in-game.
+--- I don't understand, but it works now.
 --- @param comp_pos table Vector
 --- @param target_pos table Vector
 --- @return number result In degrees
 local function calculate_yaw(comp_pos, target_pos)
     local delta_x = target_pos.x - comp_pos.x
     local delta_z = target_pos.z - comp_pos.z
-    return math.deg(math.atan2(delta_z, delta_x))
+    return math.deg(math.atan2(delta_x, delta_z))
 end
 
 --- @param pos1 table Vector
@@ -70,6 +63,7 @@ end
 --- @return table
 function puppeteer.move_to(comp, pos, reverse, line, timeout)
     return async.action().create(function()
+        if reverse == nil then reverse = false end
         local relay = comp.get_relay()
         local controls = comp.get_controls()
         -- We do this mildly convoluted 'intermediary' table step to reduce the
@@ -82,13 +76,14 @@ function puppeteer.move_to(comp, pos, reverse, line, timeout)
             local comp_info = comp.get_info()
             if comp_info then
                 local comp_pos = utils.tbl_to_vec(comp_info["position"])
+                comp_pos.y = 0 -- Discard y because we work in 2D.
                 if has_arrived(comp_pos, pos, ARRIVAL_DISTANCE_THESHOLD) then break end
                 -- We flip the desired_yaw if we're going in reverse, because the rear
                 -- must face towards the destination.
                 local desired_yaw = calculate_yaw(comp_pos, pos)
-                desired_yaw = reverse and (desired_yaw + 180) % 360 or desired_yaw
+                desired_yaw = reverse and ((desired_yaw + 360) % 360) - 180 or desired_yaw
                 local current_yaw = comp_info["orientation"]["yaw"]
-                local delta_yaw = (desired_yaw - current_yaw + 180) % 360 - 180
+                local delta_yaw = ((desired_yaw - current_yaw + 180) % 360) - 180
 
                 -- This dual threshold shenanigans is to avoid constantly turning if
                 -- delta_yaw inches _just_ above the threshold for turning.
@@ -100,8 +95,8 @@ function puppeteer.move_to(comp, pos, reverse, line, timeout)
                         (control_states["left"] or control_states["right"])
                     )
                 then
-                    control_states["right"] = delta_yaw >= 0
-                    control_states["left"] = delta_yaw < 0
+                    control_states["right"] = delta_yaw < 0
+                    control_states["left"] = delta_yaw > 0
                 else
                     control_states["reverse"] = reverse
                     control_states["forward"] = not reverse
@@ -161,7 +156,7 @@ local function manage_target_rpm(desired_yaw, comp_info, rot_controller, thresho
     -- leading to this just about never returning true and lots of unnecessary peripheral calls. This
     -- is especially bad here, because rot_controller calls freeze the script (yielding), requiring
     -- creating a coroutine for every call.
-    if threshold and delta_yaw < threshold and new_rpm == 0 then return true end
+    if threshold and math.abs(delta_yaw) < threshold then return true end
     if rot_controller.getTargetSpeed() ~= new_rpm then
         utils.run_async(
             rot_controller.setTargetSpeed,
@@ -407,12 +402,10 @@ end
 --- `/vs ship set-static true` for component and all its children.
 --- @param comp table
 --- @return table
---- @TODO: Swap print() out for commented code.
 function puppeteer.freeze(comp)
     return async.action().create(function()
         for _, name in pairs(comp.get_field_all("name")) do
-            print("vs " .. name .. " set-static true")
-            -- commands.exec("vs " .. name .. " set-static true")
+            commands.execAsync("vs set-static " .. name .. " true")
         end
     end)
 end
@@ -420,12 +413,10 @@ end
 --- `/vs ship set-static false` for component and all its children.
 --- @param comp table
 --- @return table
---- @TODO: Swap print() out for commented code.
 function puppeteer.unfreeze(comp)
     return async.action().create(function()
         for _, name in pairs(comp.get_field_all("name")) do
-            print("vs " .. name .. " set-static false")
-            -- commands.exec("vs " .. name .. " set-static false")
+            commands.execAsync("vs set-static " .. name .. " false")
         end
     end)
 end
@@ -433,13 +424,10 @@ end
 --- `/vs ship teleport x y z` for component and all its children.
 --- @param comp table
 --- @return table
---- @TODO: Swap print() out for commented code.
 function puppeteer.reset(comp)
     return async.action().create(function()
-        async.pause_until_terminated(puppeteer.unfreeze(comp))
         for name, pos in pairs(comp.get_field_all("start_pos")) do
-            print("vs " .. name .. " teleport " .. pos.x .. " " .. pos.y .. " " .. pos.z)
-            -- commands.exec("vs " .. name .. " teleport " .. pos.x .. " " .. pos.y .. " " .. pos.z)
+            commands.execAsync("vs teleport " .. name .. " " .. pos.x .. " " .. pos.y .. " " .. pos.z)
         end
         puppeteer.freeze(comp)
     end)

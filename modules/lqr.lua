@@ -4,7 +4,7 @@
 local matrix = require("matrix")
 
 --[[
-    LQR CONTROLLER MODULE
+    LQR MODULE
 ]]
 
 local lqr = setmetatable({}, {})
@@ -12,11 +12,11 @@ local lqr = setmetatable({}, {})
 --[[ MATRIX VALUES ]]
 
 local TUR_YAW_Q = matrix { -- State cost matrix
-    { 10, 0 },             -- Yaw error
-    { 0,  1 },             -- Yaw angular velocity
+    { 100, 0 },            -- Yaw error
+    { 0,   1 },            -- Yaw angular velocity
 }
 local TUR_YAW_R = matrix { -- Control cost matrix
-    { 0.5 },               -- Yaw actuator
+    { 1 },                 -- Yaw actuator
 }
 local TUR_YAW_A = matrix { -- State dynamics matrix
     { 0, 1 },              -- d(theta_y)/dt = omega_y
@@ -92,7 +92,8 @@ function lqr.get_turret_yaw_rpm(yaw_error, omega_y)
         { yaw_error },
         { omega_y },
     }
-    local control_matrix = -(TUR_YAW_K * state_matrix)
+    -- local control_matrix = -(TUR_YAW_K * state_matrix)
+    local control_matrix = TUR_YAW_K * state_matrix
     return matrix.getelement(control_matrix, 1, 1)
 end
 

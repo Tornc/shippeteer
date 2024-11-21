@@ -104,6 +104,15 @@ function utils.round_increment(number, increment)
     return utils.round(number * (1 / increment)) / (1 / increment)
 end
 
+--- Round a bunch of numbers to a whole number.
+--- @param ... number of numbers.
+--- @return number rounded_numbers
+function utils.round_nrs(...)
+    local args = { ... }
+    for i = 1, #args do args[i] = utils.round(args[i]) end
+    return table.unpack(args)
+end
+
 --- Runs a function asynchronously using coroutines.
 --- @param func function The function to run asynchronously.
 --- @param ... any Arguments of the function.
