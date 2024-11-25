@@ -4,11 +4,6 @@
     SHIPPETEER
 ]]
 
---[[ TESTING ]]
-
--- periphemu.create("top", "modem")
--- local function fake_peripheral() end
-
 --[[ DEPENDENCIES ]]
 
 package.path = package.path .. ";./modules/?.lua"
@@ -24,12 +19,10 @@ local pretty = require("cc.pretty")
 --[[ PERIPHERALS ]]
 
 local MODEM = peripheral.find("modem")
-local RELAY_TEST_HULL = peripheral.wrap("redstone_relay_3")
+local RELAY_TEST_HULL = peripheral.wrap("redstone_relay_5")
 local RELAY_TEST_TURRET = peripheral.wrap("redstone_relay_4")
+local RELAY_TINY_TEST_HULL = peripheral.wrap("redstone_relay_6")
 local ROT_CONTROLLER_TEST_TURRET = peripheral.wrap("Create_RotationSpeedController_0")
--- local RELAY_LEOPARD_HULL = { fake_peripheral }
--- local RELAY_LEOPARD_TURRET = { fake_peripheral }
--- local ROT_CONTROLLER_LEOPARD_TURRET = { fake_peripheral }
 
 --[[ CONSTANTS / SETTINGS ]]
 
@@ -64,45 +57,30 @@ ROT_CONTROLLER_TEST_TURRET.setTargetSpeed(0)
 
 --[[ VEHICLE ASSIGNMENT ]]
 
--- local NAME_LEOPARD_HULL = "leo_hull"
--- local NAME_LEOPARD_HULL_DECO = "leo_hull_deco"
--- local NAME_LEOPARD_TURRET = "leo_turret"
--- local NAME_LEOPARD_TURRET_DECO = "leo_turret_deco"
-
--- local COMPONENT_LEOPARD_HULL_DECO = components.ship().create(NAME_LEOPARD_HULL_DECO, xyz(0, 0, 0))
--- local COMPONENT_LEOPARD_HULL = components.hull().create(NAME_LEOPARD_HULL, xyz(1, 1, 1),
---     RELAY_LEOPARD_HULL, "freq_front", "freq_left", "freq_right", { "freq_back", "freq_back2" })
--- local COMPONENT_LEOPARD_TURRET_DECO = components.ship().create(NAME_LEOPARD_TURRET_DECO, xyz(2, 2, 2))
--- local COMPONENT_LEOPARD_TURRET = components.turret().create(NAME_LEOPARD_TURRET, xyz(3, 3, 3),
---     RELAY_LEOPARD_TURRET, ROT_CONTROLLER_LEOPARD_TURRET)
-
--- COMPONENT_LEOPARD_HULL.add_child_component(COMPONENT_LEOPARD_HULL_DECO, COMPONENT_LEOPARD_TURRET)
--- COMPONENT_LEOPARD_TURRET.add_child_component(COMPONENT_LEOPARD_TURRET_DECO)
--- COMPONENT_LEOPARD_TURRET.add_weapon("cannon", "top", false, 5.0)
--- COMPONENT_LEOPARD_TURRET.add_weapon("coax_machinegun", { "bottom", "left" }, true, 15)
-
--- local VEHICLE_LEOPARD = { hull = COMPONENT_LEOPARD_HULL, turret = COMPONENT_LEOPARD_TURRET }
--- add_movable(VEHICLE_LEOPARD)
-
 -- Naming
 local NAME_TEST_HULL = "test_hull"
 local NAME_TEST_TURRET = "test_turret"
+local NAME_TINY_TEST_HULL = "tiny_test_hull"
 
 -- Component creation
-local COMPONENT_TEST_HULL = components.hull().create(NAME_TEST_HULL, xyz(10, 3, 10),
+local COMPONENT_TEST_HULL = components.hull().create(NAME_TEST_HULL, xyz(10.6, 1.7, 11.4),
     RELAY_TEST_HULL, "front", "left", "right", "back")
-local COMPONENT_TEST_TURRET = components.turret().create(NAME_TEST_TURRET, xyz(10, 4, 10),
+local COMPONENT_TEST_TURRET = components.turret().create(NAME_TEST_TURRET, xyz(10.3, 2.7, 12.5),
     RELAY_TEST_TURRET, ROT_CONTROLLER_TEST_TURRET)
+local COMPONENT_TINY_TEST_HULL = components.hull().create(NAME_TINY_TEST_HULL, xyz(-0.1, 2.1, 11.6),
+    RELAY_TINY_TEST_HULL, "front", { "left", "front" }, { "right", "left", "front" }, { "back", "front" })
 
 -- Extra assignments
 COMPONENT_TEST_HULL.add_child_component(COMPONENT_TEST_TURRET)
-COMPONENT_TEST_TURRET.add_weapon("autocannon", "front", true, 10)
+COMPONENT_TEST_TURRET.add_weapon("autocannon", "front", true, 8)
 
 -- Vehicle assignment
-local VEHICLE_TEST = { hull = COMPONENT_TEST_HULL, turret = COMPONENT_TEST_TURRET }
+local VEHICLE_TEST      = { hull = COMPONENT_TEST_HULL, turret = COMPONENT_TEST_TURRET }
+local VEHICLE_TINY_TEST = { hull = COMPONENT_TINY_TEST_HULL }
 
 -- Movable registration
 add_movable(VEHICLE_TEST)
+add_movable(VEHICLE_TINY_TEST)
 
 --[[ STATE ]]
 
@@ -123,28 +101,35 @@ end
 --[[ SCRIPT ]]
 
 local function script()
-    async.pause_until_terminated(puppeteer.reset(VEHICLE_TEST.hull))
-    async.pause_until_terminated(puppeteer.unfreeze(VEHICLE_TEST.hull))
+    print("Starting actions.")
+    async.pause_until_terminated(puppeteer.reset(VEHICLE_TEST.hull, VEHICLE_TINY_TEST.hull))
+    async.pause_until_terminated(puppeteer.unfreeze(VEHICLE_TEST.hull, VEHICLE_TINY_TEST.hull))
     sleep(0.5) -- Otherwise stuff will get goofy.
 
-    local path = puppeteer.path_move_to(VEHICLE_TEST.hull,
+    local path1 = puppeteer.path_move_to(VEHICLE_TEST.hull,
         { xz(30, 20), xz(50, 0), xz(30, -25), xz(10, 10) }
     )
     local fire_mission = puppeteer.fire_at(VEHICLE_TEST.turret, xz(30, 0),
-        puppeteer.fire, { VEHICLE_TEST.turret, "autocannon", 25 }
+        puppeteer.fire, { VEHICLE_TEST.turret, "autocannon", 30 }
     )
-    async.pause_until_terminated(path, fire_mission)
-    local idle = puppeteer.turret_to_idle(VEHICLE_TEST.turret)
-    local rev = puppeteer.move_to(VEHICLE_TEST.hull, xz(-20, -20), true)
-    async.pause_until_terminated(idle, rev)
-    puppeteer.reset(VEHICLE_TEST.hull)
-    print("Done.")
+    local path2 = puppeteer.path_move_to(VEHICLE_TINY_TEST.hull,
+        { xz(50, 20), xz(30, -25), xz(0, 0) }
+    )
+    async.pause_until_terminated(path1, path2)
+    async.pause_until_terminated(path2)
+    async.pause_until_terminated(
+        fire_mission,
+        puppeteer.move_to(VEHICLE_TEST.hull, xz(-20, -20), true)
+    )
+    async.pause_until_terminated(puppeteer.turret_to_idle(VEHICLE_TEST.turret))
+    puppeteer.reset(VEHICLE_TEST.hull, VEHICLE_TINY_TEST.hull)
+    print("Finished performing actions.")
 end
 
-parallel.waitForAll(main, script, networking.message_handler)
+parallel.waitForAll(main, networking.message_handler, script)
 
--- commands.exec("vs set-static test_hull false")
--- commands.exec("setblock ~ ~5 ~ minecraft:stone")
+--- @TODO: ships shouldn't be able to have children; move that to movables --> overload get_field_all in movable()
+--- @TODO: tune LQR further to allow for firing on the move.
 
---- @TODO: tune LQR further --> 
 --- @BUG: firing mission + movement at same time with same relay, causes weirdness.
+--- @TODO: follow(comp, comp2)
