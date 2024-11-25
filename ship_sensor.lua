@@ -16,14 +16,13 @@ local MODEM = peripheral.find("modem")
 local INCOMING_CHANNEL, OUTGOING_CHANNEL = 6060, 6060
 local SETTINGS_FILE_PATH = "sensor.settings"
 local ARG_ASK_SETTINGS = "settings"
-local DIRECTIONS = { "North", "East", "South", "West" }
-local VERSION = "0.1-dev"
+local ARG_ASK_POS = "position"
+local VERSION = "0.2-dev"
 local SLEEP_INTERVAL = 1 / 20
 
 --[[ SETTINGS ]]
 
 local MY_ID
-local SHIPYARD_DIRECTION
 
 --[[ FUNCTIONS ]]
 
@@ -39,19 +38,10 @@ local function init_settings()
             "my_id",
             nil
         )
-        config.set_setting(
-            config.ask_setting(
-                "Shipyard direction?",
-                { "North", "East", "South", "West" },
-                function(i, c) return utils.contains(c, i) end),
-            "shipyard_direction",
-            nil
-        )
         config.save_settings(SETTINGS_FILE_PATH)
         sets = config.get_settings(SETTINGS_FILE_PATH)
     end
     assert(sets, "Settings failed to load somehow.")
-    SHIPYARD_DIRECTION = sets["shipyard_direction"]
     MY_ID = sets["my_id"]
 end
 
@@ -83,17 +73,16 @@ local function main()
     local display_string = "=][= SHIP SENSOR v" .. VERSION .. " =][="
     print(display_string)
     print(string.rep("-", #display_string))
-    print("Optional program argument:")
+    print("Optional program arguments:")
     print("ship_sensor [" .. ARG_ASK_SETTINGS .. "]")
+    print("ship_sensor [" .. ARG_ASK_POS .. "]")
     print(string.rep("-", #display_string))
     print("ID: " .. MY_ID)
-    print("Shipyard direction: " .. SHIPYARD_DIRECTION)
     while true do
         local message = {
             position = ship.getWorldspacePosition(),
             orientation = get_orientation(),
             omega = get_omega(),
-            inertia = ship.getMomentOfInertiaTensor()
         }
 
         networking.send_packet(message)
@@ -101,5 +90,12 @@ local function main()
     end
 end
 
-init_settings()
-main()
+if arg[1] == string.lower(ARG_ASK_POS) then
+    local pos = ship.getWorldspacePosition()
+    print("X:", utils.round(pos.x, 1))
+    print("Y:", utils.round(pos.y, 1))
+    print("Z:", utils.round(pos.z, 1))
+else
+    init_settings()
+    main()
+end
