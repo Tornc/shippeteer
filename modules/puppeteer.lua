@@ -14,7 +14,7 @@ local puppeteer = setmetatable({}, {})
 
 --[[ CONSTANTS / SETTINGS ]]
 
-local MAX_RPM = 64
+local MAX_RPM = 128
 local TURRET_YAW_THRESHOLD = 1
 local HULL_YAW_THRESHOLD = 1
 local HULL_YAW_ROTATE_THRESHOLD = 20
@@ -24,7 +24,6 @@ local ARRIVAL_DISTANCE_THESHOLD = 4
 
 function puppeteer.init(dt)
     puppeteer.dt = dt
-    lqr.init(1) -- I don't know why, but anything lower than 1 and it goes brokey.
 end
 
 --- I don't understand, but it works now.
@@ -103,11 +102,20 @@ function puppeteer.move_to(comp, pos, reverse, line, timeout)
                 end
             end
 
-            -- Actual peripheral calls to set the redstone links.
-            for control, links in pairs(controls) do
-                for _, link in pairs(utils.ensure_is_table(links)) do
-                    relay.setOutput(link, control_states[control])
+            -- Track sides that have already been set to ensure we take `true` for overlaps
+            local sides_values = {}
+            for link, links in pairs(controls) do
+                -- Get value of this link (side).
+                local link_bool = control_states[link] or false
+                -- Ensure `true` values don't get overwritten.
+                for _, side in pairs(utils.ensure_is_table(links)) do
+                    sides_values[side] = sides_values[side] or link_bool
                 end
+            end
+
+            -- Actual peripheral calls to set the redstone links.
+            for side, value in pairs(sides_values) do
+                relay.setOutput(side, value)
             end
             async.pause()
         end
@@ -142,22 +150,32 @@ end
 
 --- Note: This assumes everything is in degrees, not radians.
 --- @param desired_yaw number
---- @param comp_info table
+--- @param comp table
 --- @param rot_controller table Peripheral
 --- @param threshold number? Optional
 --- @return boolean?
-local function manage_target_rpm(desired_yaw, comp_info, rot_controller, threshold)
+local function manage_target_rpm(desired_yaw, comp, rot_controller, threshold)
+    local comp_info = comp.get_info()
+    local parent = comp.get_parent()
+    local parent_info
+    if parent then parent_info = comp.get_parent().get_info() end
+
     local current_yaw = comp_info["orientation"]["yaw"]
     local delta_yaw = (desired_yaw - current_yaw + 180) % 360 - 180
-    local omega_yaw = comp_info["omega"]["yaw"] * puppeteer.dt / 20 -- math.deg(ship.getOmega().y); degrees/tick
-    local new_rpm = utils.round(lqr.get_turret_yaw_rpm(delta_yaw, omega_yaw))
+    -- We need to take hull dynamics into account too.
+    local comp_omega_yaw = comp_info["omega"]["yaw"] * puppeteer.dt / 20 -- Degrees/tick
+    local parent_omega_yaw = parent_info and parent_info["omega"]["yaw"] * puppeteer.dt / 20 or 0
+    local omega_yaw = comp_omega_yaw
+
+    local new_rpm = utils.round(lqr.get_turret_yaw_rpm(delta_yaw, omega_yaw, parent_omega_yaw))
 
     -- Note: It's very important to round the rpm, as otherwise  the rpm checks wouldn't work properly,
     -- leading to this just about never returning true and lots of unnecessary peripheral calls. This
-    -- is especially bad here, because rot_controller calls freeze the script (yielding), requiring
-    -- creating a coroutine for every call.
-    if threshold and math.abs(delta_yaw) < threshold then return true end
-    if rot_controller.getTargetSpeed() ~= new_rpm then
+    -- is bad here, because rot_controller calls freeze the script (yielding), requiring creating a
+    -- coroutine for every call.
+    local current_rpm = rot_controller.getTargetSpeed()
+    if threshold and math.abs(delta_yaw) < threshold and current_rpm == 0 then return true end
+    if current_rpm ~= new_rpm then
         utils.run_async(
             rot_controller.setTargetSpeed,
             utils.clamp(new_rpm, -MAX_RPM, MAX_RPM)
@@ -190,7 +208,7 @@ function puppeteer.aim_at(comp, target, line, timeout)
 
             is_done = manage_target_rpm(
                 calculate_yaw(comp_pos, target_pos),
-                comp_info,
+                comp,
                 rot_controller,
                 TURRET_YAW_THRESHOLD
             )
@@ -232,7 +250,7 @@ function puppeteer.lock_on(comp, target, line, timeout)
                 target_pos = utils.tbl_to_vec(target_comp_info["position"])
             end
 
-            manage_target_rpm(calculate_yaw(comp_pos, target_pos), comp_info, rot_controller)
+            manage_target_rpm(calculate_yaw(comp_pos, target_pos), comp, rot_controller)
 
             ::continue::
             async.pause()
@@ -271,7 +289,7 @@ function puppeteer.turret_to_idle(comp, line, timeout)
 
             is_done = manage_target_rpm(
                 parent_info["orientation"]["yaw"],
-                comp_info,
+                comp,
                 rot_controller,
                 TURRET_YAW_THRESHOLD
             )
@@ -399,37 +417,46 @@ function puppeteer.fire_at(comp, target, fire_function, fire_parameters, line, t
     end, line, timeout)
 end
 
---- `/vs ship set-static true` for component and all its children.
---- @param comp table
+--- `/vs ship set-static true` for all components and all their children.
+--- @param ... table
 --- @return table
-function puppeteer.freeze(comp)
+function puppeteer.freeze(...)
+    local components = { ... }
     return async.action().create(function()
-        for _, name in pairs(comp.get_field_all("name")) do
-            commands.execAsync("vs set-static " .. name .. " true")
+        for _, comp in pairs(components) do
+            for _, name in pairs(comp.get_field_all("name")) do
+                commands.execAsync("vs set-static " .. name .. " true")
+            end
         end
     end)
 end
 
---- `/vs ship set-static false` for component and all its children.
---- @param comp table
+--- `/vs ship set-static false` for all components and all their children.
+--- @param ... table
 --- @return table
-function puppeteer.unfreeze(comp)
+function puppeteer.unfreeze(...)
+    local components = { ... }
     return async.action().create(function()
-        for _, name in pairs(comp.get_field_all("name")) do
-            commands.execAsync("vs set-static " .. name .. " false")
+        for _, comp in pairs(components) do
+            for _, name in pairs(comp.get_field_all("name")) do
+                commands.execAsync("vs set-static " .. name .. " false")
+            end
         end
     end)
 end
 
---- `/vs ship teleport x y z` for component and all its children.
---- @param comp table
+--- `/vs ship teleport x y z` for all components and all their children.
+--- @param ... table
 --- @return table
-function puppeteer.reset(comp)
+function puppeteer.reset(...)
+    local components = { ... }
     return async.action().create(function()
-        for name, pos in pairs(comp.get_field_all("start_pos")) do
-            commands.execAsync("vs teleport " .. name .. " " .. pos.x .. " " .. pos.y .. " " .. pos.z)
+        for _, comp in pairs(components) do
+            for name, pos in pairs(comp.get_field_all("start_pos")) do
+                commands.execAsync("vs teleport " .. name .. " " .. pos.x .. " " .. pos.y .. " " .. pos.z)
+            end
+            puppeteer.freeze(comp)
         end
-        puppeteer.freeze(comp)
     end)
 end
 

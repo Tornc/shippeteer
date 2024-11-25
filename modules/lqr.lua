@@ -12,32 +12,25 @@ local lqr = setmetatable({}, {})
 --[[ MATRIX VALUES ]]
 
 local TUR_YAW_Q = matrix { -- State cost matrix
-    { 100, 0 },            -- Yaw error
-    { 0,   1 },            -- Yaw angular velocity
+    { 1, 0, 0 },           -- Yaw error
+    { 0, 1, 0 },           -- Turret yaw angular velocity
+    { 0, 0, 0.1 },         -- Hull yaw angular velocity
 }
 local TUR_YAW_R = matrix { -- Control cost matrix
     { 1 },                 -- Yaw actuator
 }
 local TUR_YAW_A = matrix { -- State dynamics matrix
-    { 0, 1 },              -- d(theta_y)/dt = omega_y
-    { 0, 0 },              -- d(omega_y)/dt = 0 (no direct influence)
+    { 0, 1, -1 },          -- yaw_error dynamics
+    { 0, 0, 0 },           -- turret omega dynamics
+    { 0, 0, 0 },           -- hull omega dynamics
 }
 local TUR_YAW_B = matrix { -- Control input matrix
-    { 0 },                 -- No direct influence on theta_y
-    { 1 },                 -- Control input u_y affects omega_y
+    { 0 },                 -- No direct influence on turret theta_y
+    { 1 },                 -- Control input u_y affects turret omega_y
+    { 0 },                 -- No direct influence on hull omega_y
 }
 
 --[[ FUNCTIONS ]]
-
-function lqr.init(dt)
-    TUR_YAW_K = lqr.compute_gain(
-        TUR_YAW_Q,
-        TUR_YAW_R,
-        TUR_YAW_A,
-        TUR_YAW_B,
-        dt
-    )
-end
 
 --- @param Q table State cost matrix
 --- @param R table Control cost matrix
@@ -87,14 +80,23 @@ end
 --- @param yaw_error number
 --- @param omega_y number
 --- @return number
-function lqr.get_turret_yaw_rpm(yaw_error, omega_y)
+function lqr.get_turret_yaw_rpm(yaw_error, omega_y, omega_hull)
     local state_matrix   = matrix {
         { yaw_error },
         { omega_y },
+        { omega_hull },
     }
     -- local control_matrix = -(TUR_YAW_K * state_matrix)
     local control_matrix = TUR_YAW_K * state_matrix
     return matrix.getelement(control_matrix, 1, 1)
 end
+
+TUR_YAW_K = lqr.compute_gain(
+    TUR_YAW_Q,
+    TUR_YAW_R,
+    TUR_YAW_A,
+    TUR_YAW_B,
+    1 -- I don't know why, but anything lower than 1 and it goes brokey.
+)
 
 return lqr
