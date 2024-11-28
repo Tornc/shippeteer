@@ -24,7 +24,7 @@ local RELAY_TEST_TURRET = peripheral.wrap("redstone_relay_4")
 local RELAY_TINY_TEST_HULL = peripheral.wrap("redstone_relay_6")
 local ROT_CONTROLLER_TEST_TURRET = peripheral.wrap("Create_RotationSpeedController_0")
 
---[[ CONSTANTS / SETTINGS ]]
+--[[ SETTINGS / CONSTANTS ]]
 
 local INCOMING_CHANNEL, OUTGOING_CHANNEL = 6060, 6060
 local MY_ID = "shippeteer"
@@ -92,6 +92,7 @@ end
 
 local function main()
     while true do
+        networking.remove_old_packets()
         update_information()
         async.update()
         sleep(SLEEP_INTERVAL)
@@ -128,8 +129,10 @@ end
 
 parallel.waitForAll(main, networking.message_handler, script)
 
+--- @TODO: test non_continuous and all cannon firing
 --- @TODO: ships shouldn't be able to have children; move that to movables --> overload get_field_all in movable()
 --- @TODO: tune LQR further to allow for firing on the move.
 
 --- @BUG: firing mission + movement at same time with same relay, causes weirdness.
 --- @TODO: follow(comp, comp2)
+--- @LATER: create an installer that downloads all the modules

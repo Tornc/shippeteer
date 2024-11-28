@@ -1,6 +1,7 @@
 -- Written by Ton, with love. Feel free to modify, consider this under the MIT license.
 
 --[[ DEPENDENCIES ]]
+
 package.path = package.path .. ";./modules/?.lua"
 local config = require("config")
 local networking = require("networking")
@@ -14,7 +15,7 @@ local MODEM = peripheral.find("modem")
 --[[ CONSTANTS ]]
 
 local INCOMING_CHANNEL, OUTGOING_CHANNEL = 6060, 6060
-local SETTINGS_FILE_PATH = "sensor.settings"
+local SETTINGS_LOCATION = fs.getDir(shell.getRunningProgram()) .. "./sensor.settings"
 local ARG_ASK_SETTINGS = "settings"
 local ARG_ASK_POS = "position"
 local VERSION = "0.2-dev"
@@ -27,7 +28,7 @@ local MY_ID
 --[[ FUNCTIONS ]]
 
 local function init_settings()
-    local sets = config.get_settings(SETTINGS_FILE_PATH)
+    local sets = config.get_settings(SETTINGS_LOCATION)
     if (not sets) or arg[1] == string.lower(ARG_ASK_SETTINGS) then
         -- No need for type conversion; info is all strings anyway.
         config.set_setting(
@@ -38,8 +39,8 @@ local function init_settings()
             "my_id",
             nil
         )
-        config.save_settings(SETTINGS_FILE_PATH)
-        sets = config.get_settings(SETTINGS_FILE_PATH)
+        config.save_settings(SETTINGS_LOCATION)
+        sets = config.get_settings(SETTINGS_LOCATION)
     end
     assert(sets, "Settings failed to load somehow.")
     MY_ID = sets["my_id"]
