@@ -4,7 +4,7 @@
     BALLISTICS MODULE
 ]]
 
----@diagnostic disable: param-type-mismatch
+--- @diagnostic disable: param-type-mismatch
 
 local ballistics = setmetatable({}, {})
 

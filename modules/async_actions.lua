@@ -26,7 +26,8 @@ function async_actions.action()
         TERMINATED = 2,
     }
 
-    --- Creates a new asynchronous action.
+    --- Creates a new asynchronous action. I'm not too happy with having to pass in line _and_
+    --- timeout, but it is what it is.
     --- @param func function The function to run as a coroutine.
     --- @param line integer? The line of code that created the action in the main script.
     --- @param timeout number? After how many seconds it will give a timeout error.

@@ -8,18 +8,16 @@ local utils = require("utils")
 
 local networking = setmetatable({}, {})
 
---[[ CONSTANTS / SETTINGS ]]
-
-local PACKET_DECAY_TIME = 0.5
-
 --[[ STATE VARIABLES ]]
 
+local packet_decay_time = 0.5
 local modem
 local incoming_channel, outgoing_channel
 local my_id
 local inbox = {}
 
---- Run this in parallel.
+--- Run this in parallel. Note: it is a good idea to call
+--- `networking.remove_old_packets()` in your main loop.
 function networking.message_handler()
     modem.open(incoming_channel)
     while true do
@@ -43,7 +41,7 @@ end
 function networking.remove_old_packets()
     local current_time = utils.current_time_seconds()
     for key, packet in pairs(inbox) do
-        if current_time > packet["time"] + PACKET_DECAY_TIME then
+        if current_time > packet["time"] + packet_decay_time then
             inbox[key] = nil
         end
     end
@@ -63,6 +61,11 @@ end
 --- @param m table Peripheral
 function networking.set_modem(m)
     modem = m
+end
+
+--- @param time number Setting this time to less than or equal to zero should not be done.
+function networking.set_packet_decay_time(time)
+    packet_decay_time = time
 end
 
 --- @param incoming integer
