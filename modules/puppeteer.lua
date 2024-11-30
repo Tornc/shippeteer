@@ -2,7 +2,6 @@
 
 local async = require("async_actions")
 local lqr = require("lqr")
-local mpc = require("mpc")
 local utils = require("utils")
 local pretty = require("cc.pretty")
 
@@ -424,8 +423,13 @@ function puppeteer.freeze(...)
     local components = { ... }
     return async.action().create(function()
         for _, comp in pairs(components) do
-            for _, name in pairs(comp.get_field_all("name")) do
+            if type(comp.get_field_all) ~= "function" then
+                local name = comp.get_name()
                 commands.execAsync("vs set-static " .. name .. " true")
+            else
+                for _, name in pairs(comp.get_field_all("name")) do
+                    commands.execAsync("vs set-static " .. name .. " true")
+                end
             end
         end
     end)
@@ -438,8 +442,13 @@ function puppeteer.unfreeze(...)
     local components = { ... }
     return async.action().create(function()
         for _, comp in pairs(components) do
-            for _, name in pairs(comp.get_field_all("name")) do
+            if type(comp.get_field_all) ~= "function" then
+                local name = comp.get_name()
                 commands.execAsync("vs set-static " .. name .. " false")
+            else
+                for _, name in pairs(comp.get_field_all("name")) do
+                    commands.execAsync("vs set-static " .. name .. " false")
+                end
             end
         end
     end)
@@ -452,8 +461,14 @@ function puppeteer.reset(...)
     local components = { ... }
     return async.action().create(function()
         for _, comp in pairs(components) do
-            for name, pos in pairs(comp.get_field_all("start_pos")) do
+            if type(comp.get_field_all) ~= "function" then
+                local name = comp.get_name()
+                local pos = comp.get_start_pos()
                 commands.execAsync("vs teleport " .. name .. " " .. pos.x .. " " .. pos.y .. " " .. pos.z)
+            else
+                for name, pos in pairs(comp.get_field_all("start_pos")) do
+                    commands.execAsync("vs teleport " .. name .. " " .. pos.x .. " " .. pos.y .. " " .. pos.z)
+                end
             end
             puppeteer.freeze(comp)
         end

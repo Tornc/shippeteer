@@ -18,8 +18,42 @@ function component.ship()
         self.name = name
         self.start_pos = start_pos
         self.parent = nil
+        return self
+    end
+
+    function self.get_name()
+        return self.name
+    end
+
+    function self.get_start_pos()
+        return self.start_pos
+    end
+
+    function self.get_parent()
+        return self.parent
+    end
+
+    return self
+end
+
+--- There is 0 need to make a movable component by itself.
+local function movable()
+    local self = component.ship()
+    local super_create = self.create
+
+    function self.create(name, start_pos)
+        super_create(name, start_pos)
+        self.ship_info = {}
         self.child_components = {} -- Table of things that inherit from ship, can be left as nil
         return self
+    end
+
+    function self.update_info(info)
+        self.ship_info = info
+    end
+
+    function self.get_info()
+        return self.ship_info
     end
 
     --- @param ... table One or more components
@@ -40,14 +74,6 @@ function component.ship()
         end
     end
 
-    function self.get_name()
-        return self.name
-    end
-
-    function self.get_parent()
-        return self.parent
-    end
-
     --- Returns the value of the queried field of the component and all its children.
     --- @param field_name string It's great that `field = ...` is equivalent to `["field"] = ...`
     --- @return table result `{name1 = field1, name2 = field2, ...}`
@@ -63,28 +89,6 @@ function component.ship()
 
         traverse_and_collect(self)
         return fields
-    end
-
-    return self
-end
-
---- There is 0 need to make a movable component by itself.
-local function movable()
-    local self = component.ship()
-    local super_create = self.create
-
-    function self.create(name, start_pos)
-        super_create(name, start_pos)
-        self.ship_info = {}
-        return self
-    end
-
-    function self.update_info(info)
-        self.ship_info = info
-    end
-
-    function self.get_info()
-        return self.ship_info
     end
 
     return self
