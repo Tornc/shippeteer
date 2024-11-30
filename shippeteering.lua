@@ -9,8 +9,6 @@
 package.path = package.path .. ";./modules/?.lua"
 local async = require("async_actions")
 local components = require("components")
-local config = require("config")
-local lqr = require("lqr")
 local networking = require("networking")
 local puppeteer = require("puppeteer")
 local utils = require("utils")
@@ -73,6 +71,7 @@ local COMPONENT_TINY_TEST_HULL = components.hull().create(NAME_TINY_TEST_HULL, x
 -- Extra assignments
 COMPONENT_TEST_HULL.add_child_component(COMPONENT_TEST_TURRET)
 COMPONENT_TEST_TURRET.add_weapon("autocannon", "front", true, 8)
+COMPONENT_TEST_TURRET.add_weapon("cannon", "top", false, 5.0)
 
 -- Vehicle assignment
 local VEHICLE_TEST      = { hull = COMPONENT_TEST_HULL, turret = COMPONENT_TEST_TURRET }
@@ -110,16 +109,19 @@ local function script()
     local path1 = puppeteer.path_move_to(VEHICLE_TEST.hull,
         { xz(30, 20), xz(50, 0), xz(30, -25), xz(10, 10) }
     )
-    local fire_mission = puppeteer.fire_at(VEHICLE_TEST.turret, xz(30, 0),
+    local fire_autocannon = puppeteer.fire_at(VEHICLE_TEST.turret, xz(30, 0),
         puppeteer.fire, { VEHICLE_TEST.turret, "autocannon", 30 }
     )
     local path2 = puppeteer.path_move_to(VEHICLE_TINY_TEST.hull,
         { xz(50, 20), xz(30, -25), xz(0, 0) }
     )
     async.pause_until_terminated(path1, path2)
-    async.pause_until_terminated(path2)
+    -- local fire_cannon = puppeteer.fire_at(VEHICLE_TEST.turret, xz(30, 0), 
+    --     puppeteer.fire, {VEHICLE_TEST.turret, "cannon"}
+    -- )
     async.pause_until_terminated(
-        fire_mission,
+        fire_autocannon,
+        -- fire_cannon,
         puppeteer.move_to(VEHICLE_TEST.hull, xz(-20, -20), true)
     )
     async.pause_until_terminated(puppeteer.turret_to_idle(VEHICLE_TEST.turret))
@@ -129,10 +131,6 @@ end
 
 parallel.waitForAll(main, networking.message_handler, script)
 
---- @TODO: test non_continuous and all cannon firing
---- @TODO: ships shouldn't be able to have children; move that to movables --> overload get_field_all in movable()
 --- @TODO: tune LQR further to allow for firing on the move.
-
---- @BUG: firing mission + movement at same time with same relay, causes weirdness.
 --- @TODO: follow(comp, comp2)
 --- @LATER: create an installer that downloads all the modules
