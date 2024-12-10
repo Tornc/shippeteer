@@ -2,6 +2,7 @@
 
 local async = require("async_actions")
 local lqr = require("lqr")
+local pid = require("pid")
 local utils = require("utils")
 local pretty = require("cc.pretty")
 
@@ -13,16 +14,20 @@ local puppeteer = setmetatable({}, {})
 
 --[[ CONSTANTS / SETTINGS ]]
 
-local MAX_RPM = 128
+local MAX_RPM = 256
 local TURRET_YAW_THRESHOLD = 1
 local HULL_YAW_THRESHOLD = 1
 local HULL_YAW_ROTATE_THRESHOLD = 20
 local ARRIVAL_DISTANCE_THESHOLD = 4
+local PID_TURRET_NAME = "turret"
 
 --[[ FUNCTIONS ]]
 
 function puppeteer.init(dt)
     puppeteer.dt = dt
+    pid.set_dt(puppeteer.dt)
+    local Ku = 1.15 + 0.3
+    pid.setKpid(PID_TURRET_NAME, 0.6 * Ku, 0.5, 8.75)
 end
 
 --- I don't understand, but it works now.
@@ -162,11 +167,12 @@ local function manage_target_rpm(desired_yaw, comp, rot_controller, threshold)
     local current_yaw = comp_info["orientation"]["yaw"]
     local delta_yaw = (desired_yaw - current_yaw + 180) % 360 - 180
     -- We need to take hull dynamics into account too.
-    local comp_omega_yaw = comp_info["omega"]["yaw"] * puppeteer.dt / 20 -- Degrees/tick
-    local parent_omega_yaw = parent_info and parent_info["omega"]["yaw"] * puppeteer.dt / 20 or 0
-    local omega_yaw = comp_omega_yaw
+    local comp_omega_yaw = comp_info["omega"]["yaw"] * puppeteer.dt / 20
+    local parent_omega_yaw = parent_info and parent_info["omega"]["yaw"] * puppeteer.dt / 20 or 0 -- Degrees/tick
+    -- local omega_yaw = comp_omega_yaw - parent_omega_yaw
 
-    local new_rpm = utils.round(lqr.get_turret_yaw_rpm(delta_yaw, omega_yaw, parent_omega_yaw))
+    -- local new_rpm = utils.round(lqr.get_turret_yaw_rpm(delta_yaw, comp_omega_yaw, parent_omega_yaw))
+    local new_rpm = utils.round(pid.get_turret_rpm(PID_TURRET_NAME, delta_yaw, comp_omega_yaw))
 
     -- Note: It's very important to round the rpm, as otherwise  the rpm checks wouldn't work properly,
     -- leading to this just about never returning true and lots of unnecessary peripheral calls. This

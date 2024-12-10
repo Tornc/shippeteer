@@ -11,10 +11,14 @@ local lqr = setmetatable({}, {})
 
 --[[ MATRIX VALUES ]]
 
+-- Following Bryson's rule:
+-- Yaw error is max 180 degrees --> 1 / (180 ^ 2)
+-- Yaw angular velocity is max (256 * 0.3) degrees / tick velocity. --> 1 / ((256 * 0.3) ^ 2)
+-- The max control output in 256 RPM. --> 1 / (256 ^ 2)
 local TUR_YAW_Q = matrix { -- State cost matrix
     { 1, 0, 0 },           -- Yaw error
     { 0, 1, 0 },           -- Turret yaw angular velocity
-    { 0, 0, 0.1 },         -- Hull yaw angular velocity
+    { 0, 0, 1 },           -- Hull yaw angular velocity
 }
 local TUR_YAW_R = matrix { -- Control cost matrix
     { 1 },                 -- Yaw actuator
@@ -79,16 +83,20 @@ end
 
 --- @param yaw_error number
 --- @param omega_y number
+--- @param parent_omega_y number
 --- @return number
-function lqr.get_turret_yaw_rpm(yaw_error, omega_y, omega_hull)
-    local state_matrix   = matrix {
+function lqr.get_turret_yaw_rpm(yaw_error, omega_y, parent_omega_y)
+    local state_matrix        = matrix {
         { yaw_error },
         { omega_y },
-        { omega_hull },
+        { parent_omega_y },
     }
-    -- local control_matrix = -(TUR_YAW_K * state_matrix)
-    local control_matrix = TUR_YAW_K * state_matrix
-    return matrix.getelement(control_matrix, 1, 1)
+    local control_matrix      = TUR_YAW_K * state_matrix
+
+    -- 65 is pretty good, but only if parent_omega_y is constant.
+    local feedforward_control = 65 * parent_omega_y
+    return matrix.getelement(control_matrix, 1, 1) - feedforward_control
+    -- return matrix.getelement(control_matrix, 1, 1)
 end
 
 TUR_YAW_K = lqr.compute_gain(

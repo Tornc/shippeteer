@@ -8,6 +8,16 @@
 
 local ballistics = setmetatable({}, {})
 
+--- @param cannon_pos table Vector
+--- @param target_pos table Vector
+--- @return number result In degrees
+function ballistics.calculate_yaw(cannon_pos, target_pos)
+    local delta_x = target_pos.x - cannon_pos.x
+    local delta_z = target_pos.z - cannon_pos.z
+    -- Create Big Cannons sees South as 0 degrees instead of North.
+    return -math.deg(math.atan2(delta_x, delta_z))
+end
+
 --- Ensures that 0 < (1 - (distance - muzzle_x) / (100 * Vx)) < 1
 --- This is a conservative rough upper bound due to the assumptions.
 --- @param cannon_length integer
@@ -67,8 +77,8 @@ function ballistics.calculate_pitch(distance, velocity_ms, target_height, cannon
 
     -- The idea is to start with very large steps and decrease step size
     -- the closer we get to the actual value.
-    local num_halvings = 10           -- This is fine, too many halvings will slow down
-    local acceptable_threshold = 0.01 -- How close to X_R is good enough
+    local num_halvings = 10            -- This is fine, too many halvings will slow down
+    local acceptable_threshold = 0.001 -- How close to X_R is good enough
 
     local function a_R(t)
         -- "watch out for the square root" -Endal

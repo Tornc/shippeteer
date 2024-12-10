@@ -76,7 +76,7 @@ function async_actions.update()
     end
 end
 
---- Coroutine-friendly version of os.sleep().
+--- Coroutine-friendly version of os.sleep(), to be used in actions.
 --- @param duration number? The duration to yield in seconds. If nil, yield once.
 function async_actions.pause(duration)
     if not coroutine.running() then return end

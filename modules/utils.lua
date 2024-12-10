@@ -1,5 +1,7 @@
 -- Written by Ton, with love. Feel free to modify, consider this under the MIT license.
 
+local pretty = require("cc.pretty")
+
 --[[
     UTILITY MODULE
 
@@ -87,6 +89,20 @@ function utils.len_d(dict)
     return count
 end
 
+--- Merge 2 or more tables together. Basically `table.insert()`, but in bulk.
+--- @param ... table Tables you want to merge.
+--- @return table merged_tables
+function utils.merge_tables(...)
+    local tables = { ... }
+    local first_table = table.remove(tables, 1)
+    for _, tbl in pairs(tables) do
+        for _, elem in pairs(tbl) do
+            table.insert(first_table, elem)
+        end
+    end
+    return first_table
+end
+
 --- Rounds a number to the nearest integer or to a specified decimal place.
 --- @param num number The number to round.
 --- @param decimal number? The number of decimal places to round to. If omitted, rounds to the nearest integer.
@@ -106,7 +122,6 @@ end
 
 --- Round a bunch of numbers to a whole number.
 --- @param ... number of numbers.
---- @return number rounded_numbers
 function utils.round_nrs(...)
     local args = { ... }
     for i = 1, #args do args[i] = utils.round(args[i]) end
@@ -114,6 +129,7 @@ function utils.round_nrs(...)
 end
 
 --- Runs a function asynchronously using coroutines.
+--- <br> <sub> Fuck you, Create peripherals!!! </sub>
 --- @param func function The function to run asynchronously.
 --- @param ... any Arguments of the function.
 function utils.run_async(func, ...)
@@ -135,6 +151,16 @@ function utils.tbl_to_vec(table)
         table.y or table[2],
         table.z or table[3]
     )
+end
+
+--- Drops an axis. Maybe the CC:Tweaked's vector implementation will get updated in the future, but
+--- at the time of writing, setting an axis as nil upon creation, means it becomes 0.
+--- @param vec table Vector
+--- @param axis string `x`, `y`, `z`
+--- @return table vector A vector of which at least one of its axes is 0.
+function utils.vec_drop_axis(vec, axis)
+    vec[axis] = nil
+    return vector.new(vec.x, vec.y, vec.z)
 end
 
 return utils
