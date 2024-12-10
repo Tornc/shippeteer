@@ -49,9 +49,8 @@ networking.set_id(MY_ID)
 
 --[[ PERIPHERALS SETUP ]]
 
-turn_off(RELAY_TEST_HULL)
-turn_off(RELAY_TEST_TURRET)
-ROT_CONTROLLER_TEST_TURRET.setTargetSpeed(0)
+for _, relay in pairs({ peripheral.find("redstone_relay") }) do turn_off(relay) end
+for _, rc in pairs({ peripheral.find("Create_RotationSpeedController") }) do rc.setTargetSpeed(0) end
 
 --[[ VEHICLE ASSIGNMENT ]]
 
@@ -91,10 +90,10 @@ end
 
 local function main()
     while true do
-        networking.remove_old_packets()
+        networking.remove_decayed_packets()
         update_information()
         async.update()
-        sleep(SLEEP_INTERVAL)
+        os.sleep(SLEEP_INTERVAL)
     end
 end
 
@@ -104,19 +103,20 @@ local function script()
     print("Starting actions.")
     async.pause_until_terminated(puppeteer.reset(VEHICLE_TEST.hull, VEHICLE_TINY_TEST.hull))
     async.pause_until_terminated(puppeteer.unfreeze(VEHICLE_TEST.hull, VEHICLE_TINY_TEST.hull))
-    sleep(0.5) -- Otherwise stuff will get goofy.
+    os.sleep(0.5) -- Otherwise stuff will get goofy.
 
     local path1 = puppeteer.path_move_to(VEHICLE_TEST.hull,
         { xz(30, 20), xz(50, 0), xz(30, -25), xz(10, 10) }
     )
+    -- local path2 = puppeteer.path_move_to(VEHICLE_TINY_TEST.hull,
+    --     { xz(50, 20), xz(30, -25), xz(0, 0) }
+    -- )
     local fire_autocannon = puppeteer.fire_at(VEHICLE_TEST.turret, xz(30, 0),
         puppeteer.fire, { VEHICLE_TEST.turret, "autocannon", 30 }
     )
-    local path2 = puppeteer.path_move_to(VEHICLE_TINY_TEST.hull,
-        { xz(50, 20), xz(30, -25), xz(0, 0) }
-    )
-    async.pause_until_terminated(path1, path2)
-    -- local fire_cannon = puppeteer.fire_at(VEHICLE_TEST.turret, xz(30, 0), 
+    async.pause_until_terminated(path1)
+    -- async.pause_until_terminated(path1, path2)
+    -- local fire_cannon = puppeteer.fire_at(VEHICLE_TEST.turret, xz(30, 0),
     --     puppeteer.fire, {VEHICLE_TEST.turret, "cannon"}
     -- )
     async.pause_until_terminated(
@@ -129,8 +129,16 @@ local function script()
     print("Finished performing actions.")
 end
 
-parallel.waitForAll(main, networking.message_handler, script)
+local function script2()
+    print("Starting actions.")
+    local lock = puppeteer.lock_on(VEHICLE_TEST.turret, xz(30, 0))
+    async.pause_until_terminated(lock)
+    print("Finished performing actions.")
+end
 
+parallel.waitForAll(main, networking.message_handler, script2)
+
+--- @TODO: rework components module to use ':' - sombrero
 --- @TODO: tune LQR further to allow for firing on the move.
 --- @TODO: follow(comp, comp2)
 --- @LATER: create an installer that downloads all the modules

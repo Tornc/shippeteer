@@ -86,8 +86,10 @@ local function main()
             omega = get_omega(),
         }
 
+        -- pretty.pretty_print(ship.getMomentOfInertiaTensor()[2][2])
+
         networking.send_packet(message)
-        sleep(SLEEP_INTERVAL)
+        os.sleep(SLEEP_INTERVAL)
     end
 end
 
