@@ -30,6 +30,39 @@ function utils.clamp(value, min, max)
     return math.min(max, math.max(min, value))
 end
 
+--- Compare the values of n tables and check if they're the same.
+--- @param ... table Tables you want to compare.
+--- @return boolean
+function utils.compare_tables(...)
+    local function is_equal(table_1, table_2)
+        if type(table_1) ~= "table" or type(table_2) ~= "table" then
+            return table_1 == table_2
+        end
+
+        local keys1, keys2 = 0, 0
+        for _ in pairs(table_1) do keys1 = keys1 + 1 end
+        for _ in pairs(table_2) do keys2 = keys2 + 1 end
+        if keys1 ~= keys2 then return false end
+
+        for k, v1 in pairs(table_1) do
+            local v2 = table_2[k]
+            if not is_equal(v1, v2) then
+                return false
+            end
+        end
+
+        return true
+    end
+
+    local tables = { ... }
+    local count = #tables
+    if count < 2 then return true end
+    for i = 1, count - 1 do
+        if not is_equal(tables[i], tables[i + 1]) then return false end
+    end
+    return true
+end
+
 --- Checks if a table contains a specific value.
 --- @param table table The table to search within.
 --- @param value any The value to search for.
@@ -43,7 +76,7 @@ end
 
 --- The current time in seconds with 3 digits of precision.
 --- @return number time Time since 1 January 1970 in the UTC timezone.
-function utils.current_time_seconds()
+function utils.time_seconds()
     return os.epoch("utc") * 0.001
 end
 

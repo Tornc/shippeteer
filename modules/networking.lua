@@ -46,7 +46,7 @@ end
 --- as that will run into problems when there are 0 incoming packets. The message_handler
 --- will keep sitting inside the repeat until loop, therefore not running the function call.
 function networking.remove_decayed_packets()
-    local current_time = utils.current_time_seconds()
+    local current_time = utils.time_seconds()
     for key, packet in pairs(inbox) do
         if current_time > packet["time"] + packet_decay_time then
             inbox[key] = nil
@@ -62,7 +62,7 @@ function networking.send_packet(message, recipients)
     local packet = {
         ["id"] = my_id,
         ["recipients"] = utils.ensure_is_table(recipients),
-        ["time"] = utils.current_time_seconds(),
+        ["time"] = utils.time_seconds(),
         ["message"] = message,
     }
     modem.transmit(outgoing_channel, incoming_channel, packet)
@@ -79,7 +79,7 @@ function networking.create_packet(id, message, recipients)
     return {
         ["id"] = id,
         ["recipients"] = utils.ensure_is_table(recipients),
-        ["time"] = utils.current_time_seconds(),
+        ["time"] = utils.time_seconds(),
         ["message"] = message,
     }
 end

@@ -17,6 +17,12 @@ function async_actions.get_actions()
     return actions
 end
 
+--- # ⚠️ DO NOT USE ⚠️
+--- Very niche use-case (stupid hack).
+function async_actions.wipe_actions()
+    actions = {}
+end
+
 --- Creates and manages asynchronous actions.
 function async_actions.action()
     local self = setmetatable({}, {})
@@ -37,7 +43,7 @@ function async_actions.action()
         self.line = line
         self.timeout = timeout or 9999999 -- or in 2777 hrs
         self.state = STATES.RUNNING
-        self.end_time = utils.current_time_seconds() + self.timeout
+        self.end_time = utils.time_seconds() + self.timeout
         self.co = coroutine.create(function() return self.func() end)
         register_action(self)
         return self
@@ -51,7 +57,7 @@ function async_actions.action()
         local _, err = coroutine.resume(self.co)
 
         if err then error(tostring(err)) end
-        if utils.current_time_seconds() > self.end_time then error("Action on line " .. tostring(self.line) .. " has timed out!") end
+        if utils.time_seconds() > self.end_time then error("Action on line " .. tostring(self.line) .. " has timed out!") end
         if coroutine.status(self.co) == "dead" then self.terminate() end
     end
 
@@ -80,10 +86,10 @@ end
 --- @param duration number? The duration to yield in seconds. If nil, yield once.
 function async_actions.pause(duration)
     if not coroutine.running() then return end
-    local end_time = utils.current_time_seconds() + (duration or 0)
+    local end_time = utils.time_seconds() + (duration or 0)
     repeat
         coroutine.yield()
-    until utils.current_time_seconds() > end_time
+    until utils.time_seconds() > end_time
 end
 
 --- Pause code execution of a thread until all the given actions have been terminated.

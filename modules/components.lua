@@ -94,7 +94,7 @@ local function movable()
     return self
 end
 
-function component.hull()
+function component.simple_tracked_hull()
     local self = movable()
     local super_create = self.create
 
@@ -105,15 +105,17 @@ function component.hull()
     --- @param left string|table
     --- @param right string|table
     --- @param reverse string|table
+    --- @param track_rpm integer
     --- @return table
     function self.create(name, start_pos,
-                         relay, forward, left, right, reverse)
+                         relay, forward, left, right, reverse, track_rpm)
         super_create(name, start_pos)
         self.relay = relay -- Peripheral
         self.forward = forward
         self.left = left   -- These can be tables if there's multiple links
         self.right = right
         self.reverse = reverse
+        self.track_rpm = track_rpm
         return self
     end
 
@@ -130,6 +132,11 @@ function component.hull()
             ["right"] = self.right,
             ["reverse"] = self.reverse,
         }
+    end
+
+    --- @return integer
+    function self.get_track_rpm()
+        return self.track_rpm
     end
 
     return self
@@ -203,7 +210,7 @@ local function non_continuous_weapon()
     function self.create(name, relay, links, reload_time)
         super_create(name, relay, links)
         self.reload_time = reload_time
-        self.time_last_fired = utils.current_time_seconds()
+        self.time_last_fired = utils.time_seconds()
         self.type = "non_continuous"
         return self
     end

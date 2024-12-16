@@ -7,6 +7,8 @@ local matrix = require("matrix")
     LQR MODULE
 ]]
 
+--- @TODO: make it a class like PID.
+--- @TODO: retune
 local lqr = setmetatable({}, {})
 
 --[[ MATRIX VALUES ]]
@@ -16,23 +18,22 @@ local lqr = setmetatable({}, {})
 -- Yaw angular velocity is max (256 * 0.3) degrees / tick velocity. --> 1 / ((256 * 0.3) ^ 2)
 -- The max control output in 256 RPM. --> 1 / (256 ^ 2)
 local TUR_YAW_Q = matrix { -- State cost matrix
-    { 1, 0, 0 },           -- Yaw error
-    { 0, 1, 0 },           -- Turret yaw angular velocity
-    { 0, 0, 1 },           -- Hull yaw angular velocity
+    { 1.25, 0 },           -- Yaw error
+    { 0,    10 },          -- Yaw angular velocity
 }
 local TUR_YAW_R = matrix { -- Control cost matrix
-    { 1 },                 -- Yaw actuator
+    { 3 },                 -- Yaw actuator
 }
 local TUR_YAW_A = matrix { -- State dynamics matrix
-    { 0, 1, -1 },          -- yaw_error dynamics
-    { 0, 0, 0 },           -- turret omega dynamics
-    { 0, 0, 0 },           -- hull omega dynamics
+    { 0, 1 },              -- d(theta_y)/dt = omega_y
+    { 0, 0 },              -- d(omega_y)/dt = 0 (no direct influence)
 }
 local TUR_YAW_B = matrix { -- Control input matrix
-    { 0 },                 -- No direct influence on turret theta_y
-    { 1 },                 -- Control input u_y affects turret omega_y
-    { 0 },                 -- No direct influence on hull omega_y
+    { 0 },                 -- No direct influence on theta_y
+    { 1 },                 -- Control input u_y affects omega_y
 }
+local TUR_YAW_K
+
 
 --[[ FUNCTIONS ]]
 
@@ -40,7 +41,7 @@ local TUR_YAW_B = matrix { -- Control input matrix
 --- @param R table Control cost matrix
 --- @param A table State dynamics matrix
 --- @param B table Control input matrix
---- @param dt number Interval between control inputs. (SLEEP_INTERVAL is a safe bet)
+--- @param dt number Interval between control inputs. (`SLEEP_INTERVAL` is a safe bet)
 --- @return table K Gain matrix
 function lqr.compute_gain(Q, R, A, B, dt)
     local function discretise(_A, _B, _dt)
@@ -83,20 +84,14 @@ end
 
 --- @param yaw_error number
 --- @param omega_y number
---- @param parent_omega_y number
 --- @return number
-function lqr.get_turret_yaw_rpm(yaw_error, omega_y, parent_omega_y)
-    local state_matrix        = matrix {
+function lqr.get_turret_yaw_rpm(yaw_error, omega_y)
+    local state_matrix   = matrix {
         { yaw_error },
         { omega_y },
-        { parent_omega_y },
     }
-    local control_matrix      = TUR_YAW_K * state_matrix
-
-    -- 65 is pretty good, but only if parent_omega_y is constant.
-    local feedforward_control = 65 * parent_omega_y
-    return matrix.getelement(control_matrix, 1, 1) - feedforward_control
-    -- return matrix.getelement(control_matrix, 1, 1)
+    local control_matrix = TUR_YAW_K * state_matrix
+    return matrix.getelement(control_matrix, 1, 1)
 end
 
 TUR_YAW_K = lqr.compute_gain(

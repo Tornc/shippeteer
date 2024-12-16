@@ -2,6 +2,7 @@
 
 local async = require("async_actions")
 local lqr = require("lqr")
+local matrix = require("matrix")
 local pid = require("pid")
 local utils = require("utils")
 local pretty = require("cc.pretty")
@@ -19,22 +20,22 @@ local TURRET_YAW_THRESHOLD = 1
 local HULL_YAW_THRESHOLD = 1
 local HULL_YAW_ROTATE_THRESHOLD = 20
 local ARRIVAL_DISTANCE_THESHOLD = 4
-local PID_TURRET_NAME = "turret"
+
+--- @TODO: this does not deal well with changes in desired_yaw due to movement.
+-- local TURRET_PID_CONTROLLER = pid.controller().create(0.5, 0.45, 0.07)
+local TURRET_PID_CONTROLLER = pid.controller().create(0.5, 0.45, 0.07)
 
 --[[ FUNCTIONS ]]
 
 function puppeteer.init(dt)
     puppeteer.dt = dt
-    pid.set_dt(puppeteer.dt)
-    local Ku = 1.15 + 0.3
-    pid.setKpid(PID_TURRET_NAME, 0.6 * Ku, 0.5, 8.75)
 end
 
 --- I don't understand, but it works now.
 --- @param comp_pos table Vector
 --- @param target_pos table Vector
 --- @return number result In degrees
-local function calculate_yaw(comp_pos, target_pos)
+function puppeteer.calculate_yaw(comp_pos, target_pos)
     local delta_x = target_pos.x - comp_pos.x
     local delta_z = target_pos.z - comp_pos.z
     return math.deg(math.atan2(delta_x, delta_z))
@@ -83,7 +84,7 @@ function puppeteer.move_to(comp, pos, reverse, line, timeout)
                 if has_arrived(comp_pos, pos, ARRIVAL_DISTANCE_THESHOLD) then break end
                 -- We flip the desired_yaw if we're going in reverse, because the rear
                 -- must face towards the destination.
-                local desired_yaw = calculate_yaw(comp_pos, pos)
+                local desired_yaw = puppeteer.calculate_yaw(comp_pos, pos)
                 desired_yaw = reverse and ((desired_yaw + 360) % 360) - 180 or desired_yaw
                 local current_yaw = comp_info["orientation"]["yaw"]
                 local delta_yaw = ((desired_yaw - current_yaw + 180) % 360) - 180
@@ -152,6 +153,62 @@ function puppeteer.path_move_to(comp, waypoints, line, timeout)
     end, line, timeout)
 end
 
+--- @param hull table
+--- @return number
+local function parent_control_direction(hull)
+    local direction, left, right
+    -- Ugly instance-esque check.
+    if type(hull.get_track_rpm()) == "number" then
+        -- Determine the rpm of the left and right tracks.
+        local relay = hull.get_relay()
+        local controls = hull.get_controls()
+        local track_rpm = hull.get_track_rpm()
+
+        local activated_sides = {}
+        for _, side in pairs(rs.getSides()) do
+            -- Note that getOutput() won't work when feeding in redstone externally.
+            if relay.getOutput(side) or relay.getInput(side) then
+                table.insert(activated_sides, side)
+            end
+        end
+        local control
+        -- Sorting is important, otherwise we can't compare properly.
+        table.sort(activated_sides)
+        for ctrl, sides in pairs(controls) do
+            local sides_as_tbl = utils.ensure_is_table(sides)
+            if #sides_as_tbl > 1 then
+                table.sort(utils.ensure_is_table(sides))
+            end
+            if utils.compare_tables(sides_as_tbl, activated_sides) then
+                control = ctrl
+                break
+            end
+        end
+
+        if control == "forward" then
+            left, right = track_rpm, track_rpm
+        end
+        if control == "left" then
+            left, right = -track_rpm, track_rpm
+        end
+        if control == "right" then
+            left, right = track_rpm, -track_rpm
+        end
+        if control == "reverse" then
+            left, right = -track_rpm, -track_rpm
+        end
+    end
+
+    -- direction < 0 --> rotating left
+    -- direction == 0 --> no rotating
+    -- direction > 0 --> rotating right
+    if left ~= nil and right ~= nil then
+        direction = left == right and 0 or left - right
+    end
+
+    return direction
+end
+
 --- Note: This assumes everything is in degrees, not radians.
 --- @param desired_yaw number
 --- @param comp table
@@ -162,17 +219,26 @@ local function manage_target_rpm(desired_yaw, comp, rot_controller, threshold)
     local comp_info = comp.get_info()
     local parent = comp.get_parent()
     local parent_info
-    if parent then parent_info = comp.get_parent().get_info() end
+    local parent_ctrl_dir
+    if parent then
+        parent_info = comp.get_parent().get_info()
+        parent_ctrl_dir = parent_control_direction(parent)
+    end
+    parent_ctrl_dir = parent_ctrl_dir or 0 -- Assume no movement if there's no parent.
 
     local current_yaw = comp_info["orientation"]["yaw"]
     local delta_yaw = (desired_yaw - current_yaw + 180) % 360 - 180
     -- We need to take hull dynamics into account too.
-    local comp_omega_yaw = comp_info["omega"]["yaw"] * puppeteer.dt / 20
-    local parent_omega_yaw = parent_info and parent_info["omega"]["yaw"] * puppeteer.dt / 20 or 0 -- Degrees/tick
-    -- local omega_yaw = comp_omega_yaw - parent_omega_yaw
+    local comp_omega_yaw = comp_info["omega"]["yaw"] * puppeteer.dt -- Degrees/second -> Degrees/tick
+    local parent_omega_yaw = parent_info and parent_info["omega"]["yaw"] * puppeteer.dt or 0
 
-    -- local new_rpm = utils.round(lqr.get_turret_yaw_rpm(delta_yaw, comp_omega_yaw, parent_omega_yaw))
-    local new_rpm = utils.round(pid.get_turret_rpm(PID_TURRET_NAME, delta_yaw, comp_omega_yaw))
+    -- local lqr_output = lqr.get_turret_yaw_rpm(delta_yaw, comp_omega_yaw)
+    local pid_output = TURRET_PID_CONTROLLER.get_output(delta_yaw)
+    -- local feedforward_control = 0.05 * parent_ctrl_dir
+    local feedforward_control = 0.0775 * parent_ctrl_dir
+
+    local output = pid_output + feedforward_control
+    local new_rpm = utils.round(output)
 
     -- Note: It's very important to round the rpm, as otherwise  the rpm checks wouldn't work properly,
     -- leading to this just about never returning true and lots of unnecessary peripheral calls. This
@@ -211,8 +277,9 @@ function puppeteer.aim_at(comp, target, line, timeout)
                 target_pos = utils.tbl_to_vec(target_comp_info["position"])
             end
 
+            --- @TODO: take velocity into account; calculate future_comp_pos
             is_done = manage_target_rpm(
-                calculate_yaw(comp_pos, target_pos),
+                puppeteer.calculate_yaw(comp_pos, target_pos),
                 comp,
                 rot_controller,
                 TURRET_YAW_THRESHOLD
@@ -255,8 +322,22 @@ function puppeteer.lock_on(comp, target, line, timeout)
                 target_pos = utils.tbl_to_vec(target_comp_info["position"])
             end
 
-            manage_target_rpm(calculate_yaw(comp_pos, target_pos), comp, rot_controller)
+            --- @TODO: take velocity into account; calculate future_comp_pos
+            manage_target_rpm(puppeteer.calculate_yaw(comp_pos, target_pos), comp, rot_controller)
 
+            ::continue::
+            async.pause()
+        end
+    end, line, timeout)
+end
+
+--- @TODO: merge this with lock_on
+function puppeteer.lock_on_degrees(comp, desired_yaw, line, timeout)
+    return async.action().create(function()
+        local rot_controller = comp.get_rotational_controller()
+        while true do
+            if not comp.get_info() then goto continue end
+            manage_target_rpm(desired_yaw, comp, rot_controller)
             ::continue::
             async.pause()
         end
@@ -327,15 +408,15 @@ local function fire_non_continuous(weapon, end_time)
     assert(weapon.get_type() == "non_continuous", "Weapon is not non_continuous!")
     return async.action().create(function()
         -- Wait until reloaded
-        while utils.current_time_seconds() < weapon.get_time_last_fired() + weapon.get_reload_time() do
-            if end_time and utils.current_time_seconds() > end_time then return end
+        while utils.time_seconds() < weapon.get_time_last_fired() + weapon.get_reload_time() do
+            if end_time and utils.time_seconds() > end_time then return end
             async.pause()
         end
         -- Firing sequence.
         local relay = weapon.get_relay()
         local links = utils.ensure_is_table(weapon.get_links())
         for _, link in pairs(links) do relay.setOutput(link, true) end
-        weapon.set_time_last_fired(utils.current_time_seconds())
+        weapon.set_time_last_fired(utils.time_seconds())
         async.pause(0.25) -- Just on/off shenanigans.
         for _, link in pairs(links) do relay.setOutput(link, false) end
     end)
@@ -347,11 +428,11 @@ end
 local function fire_non_continuous_duration(weapon, duration)
     assert(weapon.get_type() == "non_continuous", "Weapon is not non_continuous!")
     return async.action().create(function()
-        local current_time = utils.current_time_seconds()
+        local current_time = utils.time_seconds()
         local end_time = current_time + duration
         while current_time < end_time do
             async.pause_until_terminated(fire_non_continuous(weapon, end_time))
-            current_time = utils.current_time_seconds()
+            current_time = utils.time_seconds()
         end
     end)
 end
