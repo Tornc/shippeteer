@@ -19,7 +19,7 @@ local pretty = require("cc.pretty")
 local MODEM = peripheral.find("modem")
 local RELAY_TEST_HULL = peripheral.wrap("redstone_relay_5")
 local RELAY_TEST_TURRET = peripheral.wrap("redstone_relay_4")
-local RELAY_TINY_TEST_HULL = peripheral.wrap("redstone_relay_6")
+local RELAY_TINY_TEST_HULL = peripheral.wrap("redstone_relay_7")
 local ROT_CONTROLLER_TEST_TURRET = peripheral.wrap("Create_RotationSpeedController_0")
 
 --[[ SETTINGS / CONSTANTS ]]
@@ -60,12 +60,12 @@ local NAME_TEST_TURRET = "test_turret"
 local NAME_TINY_TEST_HULL = "tiny_test_hull"
 
 -- Component creation
-local COMPONENT_TEST_HULL = components.hull().create(NAME_TEST_HULL, xyz(10.6, 1.7, 11.4),
-    RELAY_TEST_HULL, "front", "left", "right", "back")
+local COMPONENT_TEST_HULL = components.simple_tracked_hull().create(NAME_TEST_HULL, xyz(10.6, 1.7, 11.4),
+    RELAY_TEST_HULL, "front", "left", "right", "back", 128)
 local COMPONENT_TEST_TURRET = components.turret().create(NAME_TEST_TURRET, xyz(10.3, 2.7, 12.5),
     RELAY_TEST_TURRET, ROT_CONTROLLER_TEST_TURRET)
-local COMPONENT_TINY_TEST_HULL = components.hull().create(NAME_TINY_TEST_HULL, xyz(-0.1, 2.1, 11.6),
-    RELAY_TINY_TEST_HULL, "front", { "left", "front" }, { "right", "left", "front" }, { "back", "front" })
+local COMPONENT_TINY_TEST_HULL = components.simple_tracked_hull().create(NAME_TINY_TEST_HULL, xyz(-0.1, 2.1, 11.6),
+    RELAY_TINY_TEST_HULL, "front", { "left", "front" }, { "right", "left", "front" }, { "back", "front" }, 128)
 
 -- Extra assignments
 COMPONENT_TEST_HULL.add_child_component(COMPONENT_TEST_TURRET)
@@ -108,14 +108,14 @@ local function script()
     local path1 = puppeteer.path_move_to(VEHICLE_TEST.hull,
         { xz(30, 20), xz(50, 0), xz(30, -25), xz(10, 10) }
     )
-    -- local path2 = puppeteer.path_move_to(VEHICLE_TINY_TEST.hull,
-    --     { xz(50, 20), xz(30, -25), xz(0, 0) }
-    -- )
+    local path2 = puppeteer.path_move_to(VEHICLE_TINY_TEST.hull,
+        { xz(50, 20), xz(30, -25), xz(0, 0) }
+    )
     local fire_autocannon = puppeteer.fire_at(VEHICLE_TEST.turret, xz(30, 0),
         puppeteer.fire, { VEHICLE_TEST.turret, "autocannon", 30 }
     )
-    async.pause_until_terminated(path1)
-    -- async.pause_until_terminated(path1, path2)
+    -- async.pause_until_terminated(path1)
+    async.pause_until_terminated(path1, path2)
     -- local fire_cannon = puppeteer.fire_at(VEHICLE_TEST.turret, xz(30, 0),
     --     puppeteer.fire, {VEHICLE_TEST.turret, "cannon"}
     -- )
@@ -131,7 +131,8 @@ end
 
 local function script2()
     print("Starting actions.")
-    local lock = puppeteer.lock_on(VEHICLE_TEST.turret, xz(30, 0))
+    -- local lock = puppeteer.lock_on(VEHICLE_TEST.turret, xz(30, 0))
+    local lock = puppeteer.lock_on_degrees(VEHICLE_TEST.turret, 180)
     async.pause_until_terminated(lock)
     print("Finished performing actions.")
 end
