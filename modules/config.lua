@@ -50,7 +50,6 @@ end
 --- @return table? settings
 function config.get_settings(path)
     if not settings.load(path) then return end
-
     for _, name in pairs(settings.getNames()) do
         configurations[name] = settings.get(name)
     end

@@ -120,7 +120,32 @@ end
 --- @param id string
 --- @return any
 function networking.get_message(id)
-    return inbox[id] and inbox[id]["message"]
+    local packet = networking.get_packet(id)
+    return packet and packet["message"]
+end
+
+--- Workaround for preventing reading the same message multiple
+--- times across multiple program loops. The networking module
+--- wasn't initially built for this (stabilisers and such send
+--- messages constantly). Using raw modems would've been better,
+--- but hey, I want to re-use code, even if it's overkill/convoluted.
+--- @param id string
+--- @return boolean success true/false for success/failure
+function networking.mark_as_read(id)
+    local packet = networking.get_packet(id)
+    if packet then
+        packet["read"] = true
+        return true
+    else
+        return false
+    end
+end
+
+--- @param id string
+--- @return boolean
+function networking.has_been_read(id)
+    local packet = networking.get_packet(id)
+    return packet and packet["read"] or false
 end
 
 return networking
