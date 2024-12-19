@@ -22,7 +22,7 @@ local MAX_PITCH_RPM            = 256
 local REASSEMBLY_COOLDOWN      = 4 / 20 -- Ticks
 local INCOMING_CHANNEL         = 6060
 local OUTGOING_CHANNEL         = 6060
-local BATTERY_ID_PREFIX        = "battery_" -- Dumb solution but my brain is not big enough.
+local BATTERY_ID_PREFIX        = "battery_"
 local VERSION                  = "0.1-unfinished"
 local DISPLAY_STRING           = "=][= CANNON v" .. VERSION .. " =][="
 -- Ideally 2 ticks. But to ensure maximum reliability, do 4 ticks. <= 0.15 degrees is _fine_.
@@ -367,8 +367,8 @@ local function main()
         end
         if command_msg["type"] == "fire_mission" then
             --- @TODO: uncomment later
-            -- Note: During the execution of `move_cannon()` and `fire_cannon()`, the script
-            -- will ignore all messages sent to it.
+            -- Note: During the execution of `move_cannon()` and `fire_cannon()`,
+            -- the script will ignore all messages sent to it.
             -- move_cannon(command_msg["yaw"], command_msg["pitch"])
             fire_cannon()
             networking.send_packet({ type = "fire_mission_completion" })

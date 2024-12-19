@@ -81,7 +81,7 @@ local function ask_barrage_parameters()
     local target_pos = convert_type(
         config.ask_setting(
             "Target position <X Y Z>?",
-            { "0 0 0" },
+            { "1 2 3" },
             function(i)
                 local coordinate = {}
                 for value in i:gmatch("%S+") do
@@ -103,7 +103,7 @@ local function ask_barrage_parameters()
     local spacing = convert_type(
         config.ask_setting(
             "Spacing?",
-            {},
+            {"1"},
             function(i) return tonumber(i) end
         ),
         function(i) return tonumber(i) end
@@ -111,7 +111,7 @@ local function ask_barrage_parameters()
     local semi_width = convert_type(
         config.ask_setting(
             "Semi-width?",
-            {},
+            {"1"},
             function(i) return tonumber(i) end
         ),
         function(i) return tonumber(i) end
@@ -119,7 +119,7 @@ local function ask_barrage_parameters()
     local semi_height = convert_type(
         config.ask_setting(
             "Semi-height?",
-            {},
+            {"1"},
             function(i) return tonumber(i) end
         ),
         function(i) return tonumber(i) end
