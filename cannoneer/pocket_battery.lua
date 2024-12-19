@@ -73,10 +73,10 @@ local function convert_type(var, type_conversion_func)
 end
 
 --- Yes, I'm using config.ask_setting() because it's convenient.
---- @return table Vector
---- @return integer
---- @return integer
---- @return integer
+--- @return table target_position Vector
+--- @return integer spacing
+--- @return integer semi_width
+--- @return integer semi_height
 local function ask_barrage_parameters()
     local target_pos = convert_type(
         config.ask_setting(
@@ -154,7 +154,12 @@ local function await_barrage_completion()
     while true do
         networking.remove_decayed_packets()
         local command_msg = networking.get_message(COMMAND_ID)
-        if command_msg and command_msg["type"] == "artillery_barrage_completion" then
+        if
+            command_msg and
+            command_msg["type"] == "artillery_barrage_completion" and
+            (not networking.has_been_read(COMMAND_ID))
+        then
+            networking.mark_as_read(COMMAND_ID)
             break
         end
         os.sleep(SLEEP_INTERVAL)
@@ -165,7 +170,6 @@ end
 local function main()
     print(DISPLAY_STRING)
     print(string.rep("-", #DISPLAY_STRING))
-
     while true do
         local tpos, sp, sw, sh = confirm_ask__barrage_parameters()
         networking.send_packet(
@@ -179,9 +183,9 @@ local function main()
             },
             COMMAND_ID
         )
-        play_sound(START_FIRE[math.random(#START_FIRE)])
+        utils.run_async(play_sound, START_FIRE[math.random(#START_FIRE)])
         await_barrage_completion()
-        play_sound(END_FIRE[math.random(#END_FIRE)])
+        utils.run_async(play_sound, END_FIRE[math.random(#END_FIRE)])
     end
 end
 

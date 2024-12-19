@@ -1,10 +1,11 @@
 --[[ TESTING ]]
 
--- periphemu.create("top", "modem")
+periphemu.create("top", "modem")
 
 --[[ DEPENDENCIES ]]
 
-package.path = package.path .. ";../modules/?.lua"
+-- package.path = package.path .. ";../modules/?.lua"
+package.path = package.path .. ";./modules/?.lua"
 local config = require("config")
 local networking = require("networking")
 local utils = require("utils")
@@ -12,18 +13,21 @@ local pretty = require("cc.pretty")
 
 --[[ CONSTANTS ]]
 
-local SETTINGS_LOCATION   = fs.getDir(shell.getRunningProgram()) .. "./cannon.settings"
-local ARG_ASK_SETTINGS    = "settings"
-local CBC_GEARDOWN_RATIO  = 8
-local MAX_YAW_RPM         = 256    -- Not the actual speed, the MAX speed! Only relevant if you're SU limited.
-local MAX_PITCH_RPM       = 256
-local REASSEMBLY_COOLDOWN = 4 / 20 -- Ticks
-local INCOMING_CHANNEL    = 6060
-local OUTGOING_CHANNEL    = 6060
-local BATTERY_ID_PREFIX   = "battery_" -- Dumb solution but my brain is not big enough.
-local VERSION             = "0.1-unfinished"
+local SETTINGS_LOCATION        = fs.getDir(shell.getRunningProgram()) .. "./cannon_battery.settings"
+local ARG_ASK_SETTINGS         = "settings"
+local ARG_PRINT_SETTINGS       = "print"
+local CBC_GEARDOWN_RATIO       = 8
+local MAX_YAW_RPM              = 256    -- Not the actual speed, the MAX speed! Only relevant if you're SU limited.
+local MAX_PITCH_RPM            = 256
+local REASSEMBLY_COOLDOWN      = 4 / 20 -- Ticks
+local INCOMING_CHANNEL         = 6060
+local OUTGOING_CHANNEL         = 6060
+local BATTERY_ID_PREFIX        = "battery_" -- Dumb solution but my brain is not big enough.
+local VERSION                  = "0.1-unfinished"
+local DISPLAY_STRING           = "=][= CANNON v" .. VERSION .. " =][="
 -- Ideally 2 ticks. But to ensure maximum reliability, do 4 ticks. <= 0.15 degrees is _fine_.
-local MOVE_SLEEP_INTERVAL = 4 / 20
+local MOVE_SLEEP_INTERVAL      = 4 / 20
+local MAIN_LOOP_SLEEP_INTERVAL = 6 / 20
 
 --[[ SETTINGS ]]
 
@@ -42,6 +46,7 @@ local PITCH_CONTROLLER_SIDE  --
 local CANNON_ASSEMBLY_SIDE   --
 local CANNON_FIRE_SIDE       --
 
+--- I HATE INPUT VALIDATION I HATE INPUT VALIDATION
 local function init_settings()
     local settings = config.get_settings(SETTINGS_LOCATION)
     if (not settings) or arg[1] == string.lower(ARG_ASK_SETTINGS) then
@@ -313,31 +318,76 @@ local function move_cannon(desired_yaw, desired_pitch)
     end
 end
 
-local display_string = "=][= CANNON v" .. VERSION .. " =][="
-print(display_string)
-print(string.rep("-", #display_string))
-print("Optional program arguments:")
-print("ship_sensor [" .. ARG_ASK_SETTINGS .. "]")
-print(string.rep("-", #display_string))
-print("My ID:", MY_ID)
-print("Command ID:", COMMAND_ID)
-print("Cannon pos:", CANNON_POS)
-print("Cannon length:", CANNON_LENGTH)
-print("Cannon type:", CANNON_TYPE)
-print("Projectile velocity (m/s):", PROJECTILE_VELOCITY_MS)
-print("Reload time:", RELOAD_TIME)
-print("Starting yaw, pitch:", STARTING_YAW .. ", " .. STARTING_PITCH)
-print("Min, max pitch:", PITCH_RANGE[1] .. ", " .. PITCH_RANGE[2])
-print("Yaw controller side:", YAW_CONTROLLER_SIDE)
-print("Pitch controller side:", PITCH_CONTROLLER_SIDE)
-print("Cannon assembly side:", CANNON_ASSEMBLY_SIDE)
-print("Cannon fire side:", CANNON_FIRE_SIDE)
+local function print_settings()
+    print("My ID:", MY_ID)
+    print("Command ID:", COMMAND_ID)
+    print("Cannon pos:", CANNON_POS)
+    print("Cannon length:", CANNON_LENGTH)
+    print("Cannon type:", CANNON_TYPE)
+    print("Projectile velocity (m/s):", PROJECTILE_VELOCITY_MS)
+    print("Reload time:", RELOAD_TIME)
+    print("Starting yaw, pitch:", STARTING_YAW .. ", " .. STARTING_PITCH)
+    print("Min, max pitch:", PITCH_RANGE[1] .. ", " .. PITCH_RANGE[2])
+    print("Yaw controller side:", YAW_CONTROLLER_SIDE)
+    print("Pitch controller side:", PITCH_CONTROLLER_SIDE)
+    print("Cannon assembly side:", CANNON_ASSEMBLY_SIDE)
+    print("Cannon fire side:", CANNON_FIRE_SIDE)
+end
+
+local function main()
+    print(DISPLAY_STRING)
+    print(string.rep("-", #DISPLAY_STRING))
+    print("Optional program arguments:")
+    print("cannon_battery [" .. ARG_ASK_SETTINGS .. "]")
+    print("cannon_battery [" .. ARG_PRINT_SETTINGS .. "]")
+    print(string.rep("-", #DISPLAY_STRING))
+    if arg[1] == string.lower(ARG_PRINT_SETTINGS) then print_settings() end
+
+    while true do
+        networking.remove_decayed_packets()
+
+        local command_msg = networking.get_message(COMMAND_ID)
+        if not command_msg then goto continue end
+        if networking.has_been_read(COMMAND_ID) then goto continue end
+        networking.mark_as_read(COMMAND_ID)
+        if command_msg["type"] == "info_request" then
+            networking.send_packet(
+                {
+                    type = "cannon_info",
+                    position = CANNON_POS,
+                    velocity_ms = PROJECTILE_VELOCITY_MS,
+                    cannon_length = CANNON_LENGTH,
+                    cannon_type = CANNON_TYPE,
+                    min_pitch = PITCH_RANGE[1],
+                    max_pitch = PITCH_RANGE[2],
+                    reload_time = RELOAD_TIME
+                },
+                COMMAND_ID
+            )
+        end
+        if command_msg["type"] == "fire_mission" then
+            --- @TODO: uncomment later
+            -- Note: During the execution of `move_cannon()` and `fire_cannon()`, the script
+            -- will ignore all messages sent to it.
+            -- move_cannon(command_msg["yaw"], command_msg["pitch"])
+            fire_cannon()
+            networking.send_packet({ type = "fire_mission_completion" })
+        end
+
+        ::continue::
+        os.sleep(MAIN_LOOP_SLEEP_INTERVAL)
+    end
+end
+
+reassemble_cannon()
+parallel.waitForAny(main, networking.message_handler)
+
+--- @TODO: add vs addition compat
 
 -- reassemble_cannon()
 -- move_cannon(tonumber(arg[1]) or 0, tonumber(arg[2]) or 0)
 -- fire_cannon()
 
--- reassemble_cannon()
 -- local count = 1
 -- while true do
 --     print("Turn #" .. count)
@@ -347,17 +397,3 @@ print("Cannon fire side:", CANNON_FIRE_SIDE)
 --     os.sleep(1.5)
 --     count = count + 1
 -- end
-
--- networking.send_packet(
---     {
---         type = "cannon_info",
---         position = CANNON_POS,
---         velocity_ms = PROJECTILE_VELOCITY_MS,
---         cannon_length = CANNON_LENGTH,
---         cannon_type = CANNON_TYPE,
---         min_pitch = PITCH_RANGE[1],
---         max_pitch = PITCH_RANGE[2],
---         reload_time = RELOAD_TIME
---     },
---     COMMAND_ID
--- )
