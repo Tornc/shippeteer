@@ -220,6 +220,7 @@ init_settings()
 
 --[[ PERIPHERALS ]]
 
+local CANNON = peripheral.find("cbc_cannon_mount")
 local YAW_CONTROLLER = peripheral.wrap(YAW_CONTROLLER_SIDE)
 local PITCH_CONTROLLER = peripheral.wrap(PITCH_CONTROLLER_SIDE)
 local MODEM = peripheral.find("modem")
@@ -350,7 +351,10 @@ local function main()
         if not command_msg then goto continue end
         if networking.has_been_read(COMMAND_ID) then goto continue end
         networking.mark_as_read(COMMAND_ID)
-        if command_msg["type"] == "info_request" then
+        if
+            command_msg[1] and
+            command_msg[1]["type"] == "info_request"
+        then
             networking.send_packet(
                 {
                     type = "cannon_info",
@@ -359,19 +363,32 @@ local function main()
                     cannon_length = CANNON_LENGTH,
                     cannon_type = CANNON_TYPE,
                     min_pitch = PITCH_RANGE[1],
-                    max_pitch = PITCH_RANGE[2],
-                    reload_time = RELOAD_TIME
-                },
-                COMMAND_ID
+                    max_pitch = PITCH_RANGE[2]
+                }
             )
         end
-        if command_msg["type"] == "fire_mission" then
+        if
+            command_msg and
+            command_msg[MY_ID] and
+            command_msg[MY_ID]["type"] == "fire_mission"
+        then
             --- @TODO: uncomment later
-            -- Note: During the execution of `move_cannon()` and `fire_cannon()`,
-            -- the script will ignore all messages sent to it.
-            -- move_cannon(command_msg["yaw"], command_msg["pitch"])
-            fire_cannon()
+            -- Note: During the execution of `move_cannon()`, `fire_cannon()`
+            -- and reloading, the script will ignore all messages sent to it.
+            -- if CANNON then
+            --     CANNON.setYaw(command_msg[MY_ID]["yaw"])
+            --     CANNON.setPitch(command_msg[MY_ID]["pitch"])
+            --     os.sleep(1.0)
+            --     CANNON.fire()
+            -- else
+            --     move_cannon(command_msg[MY_ID]["yaw"], command_msg[MY_ID]["pitch"])
+            --     fire_cannon()
+            -- end
+            --- @TODO: remove sleep later
+            os.sleep(0.5)
             networking.send_packet({ type = "fire_mission_completion" })
+            os.sleep(RELOAD_TIME)
+            networking.send_packet({ type = "has_reloaded" })
         end
 
         ::continue::
@@ -379,10 +396,15 @@ local function main()
     end
 end
 
-reassemble_cannon()
+-- networking.send_packet({ type = "has_reloaded" })
+
+if not CANNON then
+    reassemble_cannon()
+end
 parallel.waitForAny(main, networking.message_handler)
 
---- @TODO: add vs addition compat
+--- @TODO: when there's a cannon peripheral, there's no need for config to ask for/use:
+--- CANNON_POS, STARTING_YAW, STARTING_PITCH, PITCH_RANGE, YAW_CONTROLLER_SIDE, PITCH_CONTROLLER_SIDE, CANNON_ASSEMBLY_SIDE, CANNON_FIRE_SIDE
 
 -- reassemble_cannon()
 -- move_cannon(tonumber(arg[1]) or 0, tonumber(arg[2]) or 0)

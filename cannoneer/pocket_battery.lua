@@ -103,24 +103,24 @@ local function ask_barrage_parameters()
     local spacing = convert_type(
         config.ask_setting(
             "Spacing?",
-            {"1"},
-            function(i) return tonumber(i) end
+            { "0" },
+            function(i) return tonumber(i) >= 0 end
         ),
         function(i) return tonumber(i) end
     )
     local semi_width = convert_type(
         config.ask_setting(
             "Semi-width?",
-            {"1"},
-            function(i) return tonumber(i) end
+            { "0" },
+            function(i) return tonumber(i) >= 0 end
         ),
         function(i) return tonumber(i) end
     )
     local semi_height = convert_type(
         config.ask_setting(
             "Semi-height?",
-            {"1"},
-            function(i) return tonumber(i) end
+            { "0" },
+            function(i) return tonumber(i) >= 0 end
         ),
         function(i) return tonumber(i) end
     )
@@ -156,7 +156,8 @@ local function await_barrage_completion()
         local command_msg = networking.get_message(COMMAND_ID)
         if
             command_msg and
-            command_msg["type"] == "artillery_barrage_completion" and
+            command_msg[MY_ID] and
+            command_msg[MY_ID]["type"] == "artillery_barrage_completion" and
             (not networking.has_been_read(COMMAND_ID))
         then
             networking.mark_as_read(COMMAND_ID)
@@ -179,9 +180,7 @@ local function main()
                 spacing = sp,
                 semi_width = sw,
                 semi_height = sh,
-
-            },
-            COMMAND_ID
+            }
         )
         utils.run_async(play_sound, START_FIRE[math.random(#START_FIRE)])
         await_barrage_completion()
