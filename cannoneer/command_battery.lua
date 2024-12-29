@@ -21,11 +21,10 @@ local TN = 750
 -- Too lazy to do implement fallback trajectory.
 local PREFERRED_TRAJECTORY = false -- true = low, false = high.
 local INCOMING_CHANNEL, OUTGOING_CHANNEL = 6060, 6060
-local BATTERY_ID_PREFIX = "battery_"
-local MY_ID = BATTERY_ID_PREFIX .. "command"
+local MY_ID = "battery_command"
 local MAX_LOOP_TIME = 0.05
 local FIRE_MISSION_TIMEOUT = 60 -- In seconds
-local SLEEP_INTERVAL = 4 / 20
+local SLEEP_INTERVAL = 4 / 20   -- In ticks
 
 --[[ STATE VARIABLES ]]
 
@@ -45,19 +44,17 @@ networking.set_id(MY_ID)
 
 --[[ FUNCTIONS ]]
 
-local function find_overwrite_cannon(cannons, new_cannon)
-    for i, existing_cannon in ipairs(cannons) do
-        if existing_cannon.id == new_cannon.id then
-            cannons[i] = new_cannon
-            return true
-        end
-    end
-    return false
-end
-
 local function cannon()
     local self = setmetatable({}, {})
 
+    --- @param id string
+    --- @param position table Vector
+    --- @param velocity_ms integer
+    --- @param cannon_length integer
+    --- @param is_med_cannon boolean
+    --- @param min_pitch integer
+    --- @param max_pitch integer
+    --- @return table
     function self.create(
         id, position, velocity_ms,
         cannon_length, is_med_cannon,
@@ -73,11 +70,16 @@ local function cannon()
         return self
     end
 
+    --- @param target_pos table Vector
+    --- @param trajectory boolean true = low, false = high
+    --- @return number? yaw Required yaw
+    --- @return number? pitch Required pitch
+    --- @return number? t Flight time in ticks
     function self.calculate(target_pos, trajectory)
         local yaw = ballistics.calculate_yaw(self.position, target_pos)
         local distance = utils.vec_drop_axis(target_pos - self.position, "y"):length()
         local target_height = target_pos.y - self.position.y
-        local flight_time, pitch = ballistics.calculate_pitch(
+        local t, pitch = ballistics.calculate_pitch(
             distance,
             self.velocity_ms,
             target_height,
@@ -86,12 +88,25 @@ local function cannon()
             trajectory,
             self.is_med_cannon
         )
-        if not (flight_time or pitch) then return nil, nil, nil end
+        if not (t or pitch) then return nil, nil, nil end
         if pitch < self.min_pitch or pitch > self.max_pitch then return nil, nil, nil end
-        return yaw, pitch, flight_time
+        return yaw, pitch, t
     end
 
     return self
+end
+
+--- @param cannons table A table of cannon()s
+--- @param new_cannon table cannon()
+--- @return boolean has_found Whether new_cannon already exists in cannons
+local function find_overwrite_cannon(cannons, new_cannon)
+    for i, existing_cannon in ipairs(cannons) do
+        if existing_cannon.id == new_cannon.id then
+            cannons[i] = new_cannon
+            return true
+        end
+    end
+    return false
 end
 
 --- @param target table Vector
@@ -118,12 +133,50 @@ local function generate_coordinates(target, spacing, semi_width, semi_height)
     return coordinates
 end
 
+--- Message format:
+--- ```lua
+--- {
+---     { ... }, -- Message to all
+---     ["Recipient_1"] = { ... },
+---     ["Recipient_2"] = { ... },
+---     ...
+--- }
+--- ```
 --- @param part any
 --- @param recipient string?
 local function add_to_message(part, recipient)
     -- Maybe inserting (appending) is better here if it's intended for everyone.
     -- Instead of just replacing.
     resulting_message[recipient or 1] = part
+end
+
+--- Returns nil, nil if no suitable cannon has been found.
+--- @param target_pos table Vector
+--- @return string? cannon_id The cannon that's supposed to fire on the target
+--- @return number? t Shell flight time in ticks
+local function order_available_cannon(target_pos)
+    if #available_cannons == 0 then return end
+    for i, can in ipairs(available_cannons) do
+        local yaw, pitch, t = can.calculate(target_pos, PREFERRED_TRAJECTORY)
+        -- Valid solution
+        if yaw and pitch and t then
+            add_to_message({
+                ["type"] = "fire_mission",
+                ["yaw"] = yaw,
+                ["pitch"] = pitch,
+            }, can.id)
+            table.insert(unavailable_cannons, table.remove(available_cannons, i))
+            return can.id, t
+        end
+    end
+
+    --- @TODO: IF NONE ARE VALID
+    --- move target to back of queue
+    --- remember which cannons we tried already (for that specific target)
+    --- Try again with new ones, if it still doesn’t work, keep moving to the back.
+    --- if we really have tried all possible cannons at both trajectories, but
+    --- it still doesn’t work, then discard
+    return nil, nil
 end
 
 -- [[ STATE ]]
@@ -179,32 +232,59 @@ local function process_inbox()
     end
 end
 
---- @param target_pos table Vector
---- @return string? cannon_id The cannon that's supposed to fire on the target.
---- @return number? tn Shell flight time in ticks
-local function order_available_cannon(target_pos)
-    if #available_cannons == 0 then return end
-    for i, can in ipairs(available_cannons) do
-        local yaw, pitch, tn = can.calculate(target_pos, PREFERRED_TRAJECTORY)
-        -- Valid solution
-        if yaw and pitch and tn then
-            add_to_message({
-                ["type"] = "fire_mission",
-                ["yaw"] = yaw,
-                ["pitch"] = pitch,
-            }, can.id)
-            table.insert(unavailable_cannons, table.remove(available_cannons, i))
-            return can.id, tn
+local function handle_barrage_completion()
+    -- This will mean some cannons may be idle, waiting until the current request
+    -- is 100% finished, but I don't care enough.
+    if (current_request["coordinates"] == nil or #current_request["coordinates"] == 0) and
+        #wip_fire_missions == 0
+    then
+        -- Ordering is important. Who would've thought?
+        if current_request["id"] then
+            add_to_message(
+                { type = "artillery_barrage_completion" },
+                current_request["id"]
+            )
+        end
+        current_request = #barrage_requests > 0 and table.remove(barrage_requests, 1) or {}
+    end
+end
+
+local function allocate_cannons_to_targets()
+    local start_time = utils.time_seconds()
+    while current_request["coordinates"] and #current_request["coordinates"] > 0 and #available_cannons > 0 do
+        local target_pos = current_request["coordinates"][1]
+        local can_id, flight_time_ticks = order_available_cannon(target_pos)
+        if can_id and flight_time_ticks then
+            table.remove(current_request["coordinates"], 1)
+            table.insert(wip_fire_missions, {
+                id = can_id,
+                pos = target_pos,
+                flight_time = flight_time_ticks / 20, -- Our current time function works in seconds.
+                fired_time = nil,
+                timeout_time = utils.time_seconds() + FIRE_MISSION_TIMEOUT
+            })
+        else
+            --- @TODO: don't just ignore our problems out of convenience...
+            table.remove(current_request["coordinates"], 1)
+        end
+        if utils.time_seconds() - start_time > MAX_LOOP_TIME then break end
+    end
+end
+
+--- Remove all fire_missions of which the shells have already
+--- hit the target or have taken way too long to complete.
+local function cleanup_wip_missions()
+    for i = #wip_fire_missions, 1, -1 do
+        local fire_mission = wip_fire_missions[i]
+        if fire_mission.fired_time and
+            utils.time_seconds() - fire_mission.fired_time > fire_mission.flight_time
+        then
+            table.remove(wip_fire_missions, i)
+        elseif utils.time_seconds() > fire_mission.timeout_time then
+            -- Transfer the coordinates back to current_request to try again.
+            table.insert(current_request["coordinates"], table.remove(wip_fire_missions, i).pos)
         end
     end
-
-    --- @TODO: IF NONE ARE VALID
-    --- move target to back of queue
-    --- remember which cannons we tried already (for that specific target)
-    --- Try again with new ones, if it still doesn’t work, keep moving to the back.
-    --- if we really have tried all possible cannons at both trajectories, but
-    --- it still doesn’t work, then discard
-    return nil, nil
 end
 
 local function main()
@@ -212,65 +292,22 @@ local function main()
     add_to_message({ type = "info_request" })
     while true do
         networking.remove_decayed_packets()
+        -- term.clear()
+        -- print("Current request:")
+        -- pretty.pretty_print(current_request)
+        -- print("WIP fire missions:")
+        -- pretty.pretty_print(wip_fire_missions)
+        -- if wip_fire_missions[1] and wip_fire_missions[1].fired_time then
+        --     print("Time until next impact:",
+        --         wip_fire_missions[1].flight_time - utils.time_seconds() + wip_fire_missions[1].fired_time
+        --     )
+        -- end
+        -- print("Cannons av/na:", #available_cannons, #unavailable_cannons)
+
         process_inbox()
-
-        term.clear()
-        print("Current request:")
-        pretty.pretty_print(current_request)
-        print("WIP fire missions:")
-        pretty.pretty_print(wip_fire_missions)
-        if wip_fire_missions[1] and wip_fire_missions[1].fired_time then
-            print("Time until next impact:",
-                wip_fire_missions[1].flight_time - utils.time_seconds() + wip_fire_missions[1].fired_time
-            )
-        end
-        print("Cannons av/na:", #available_cannons, #unavailable_cannons)
-
-        -- This will mean some cannons may be idle, waiting until the current request
-        -- is 100% finished, but I don't care enough.
-        if (current_request["coordinates"] == nil or #current_request["coordinates"] == 0) and
-            #wip_fire_missions == 0
-        then
-            -- Ordering is important. Who would've thought?
-            if current_request["id"] then
-                add_to_message(
-                    { type = "artillery_barrage_completion" },
-                    current_request["id"]
-                )
-            end
-            current_request = #barrage_requests > 0 and table.remove(barrage_requests, 1) or {}
-        end
-
-        local start_time = utils.time_seconds()
-        while current_request["coordinates"] and #current_request["coordinates"] > 0 and #available_cannons > 0 do
-            local target_pos = current_request["coordinates"][1]
-            local can_id, flight_time_ticks = order_available_cannon(target_pos)
-            if can_id and flight_time_ticks then
-                table.remove(current_request["coordinates"], 1)
-                table.insert(wip_fire_missions, {
-                    id = can_id,
-                    pos = target_pos,
-                    flight_time = flight_time_ticks / 20, -- Our current time function works in seconds.
-                    fired_time = nil,
-                    timeout_time = utils.time_seconds() + FIRE_MISSION_TIMEOUT
-                })
-            else
-                --- @TODO: don't just ignore our problems out of convenience...
-                table.remove(current_request["coordinates"], 1)
-            end
-            if utils.time_seconds() - start_time > MAX_LOOP_TIME then break end
-        end
-        for i = #wip_fire_missions, 1, -1 do
-            local fire_mission = wip_fire_missions[i]
-            if fire_mission.fired_time and
-                utils.time_seconds() - fire_mission.fired_time > fire_mission.flight_time
-            then
-                table.remove(wip_fire_missions, i)
-            elseif utils.time_seconds() > fire_mission.timeout_time then
-                -- Transfer the coordinates back to the current_request to try again, since it took too long.
-                table.insert(current_request["coordinates"], table.remove(wip_fire_missions, i).pos)
-            end
-        end
+        handle_barrage_completion()
+        allocate_cannons_to_targets()
+        cleanup_wip_missions()
 
         -- Avoid needlessly sending out empty messages.
         if utils.count_keys(resulting_message) > 0 then networking.send_packet(resulting_message) end
@@ -278,27 +315,5 @@ local function main()
         os.sleep(SLEEP_INTERVAL)
     end
 end
-
-local function test_input()
-    table.insert(barrage_requests, {
-        id = "test_orderer1",
-        coordinates = generate_coordinates(vector.new(500, 0, 0), 1, 2, 2)
-    })
-    table.insert(barrage_requests, {
-        id = "test_orderer2",
-        coordinates = generate_coordinates(vector.new(450, 0, 0), 4, 5, 0)
-    })
-    table.insert(barrage_requests, {
-        id = "test_orderer3",
-        coordinates = generate_coordinates(vector.new(400, 0, 0), 1, 1, 1)
-    })
-    table.insert(available_cannons, cannon().create("c1", vector.new(0, 0, 0), 160, 11, false, -30, 60))
-    table.insert(available_cannons, cannon().create("c2", vector.new(50, 0, 10), 160, 11, false, -30, 60))
-    table.insert(available_cannons, cannon().create("c3", vector.new(100, 0, 20), 160, 11, false, -30, 60))
-    table.insert(available_cannons,
-        cannon().create("battery_cannon_1", vector.new(100, 0, 20), 160, 11, false, -30, 60))
-end
-
--- test_input()
 
 parallel.waitForAny(main, networking.message_handler)

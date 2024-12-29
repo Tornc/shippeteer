@@ -5,8 +5,7 @@ periphemu.create("back", "speaker")
 
 --[[ DEPENDENCIES ]]
 
--- package.path = package.path .. ";../modules/?.lua"
-package.path = package.path .. ";./modules/?.lua"
+package.path = package.path .. ";../modules/?.lua"
 local config = require("config")
 local dfpwm = require("cc.audio.dfpwm")
 local networking = require("networking")
@@ -21,9 +20,8 @@ local SPEAKER = peripheral.find("speaker")
 --[[ SETTINGS / CONSTANTS ]]
 
 local INCOMING_CHANNEL, OUTGOING_CHANNEL = 6060, 6060
-local BATTERY_ID_PREFIX = "battery_"
-local MY_ID = BATTERY_ID_PREFIX .. "pocket"
-local COMMAND_ID = BATTERY_ID_PREFIX .. "command"
+local MY_ID = "battery_pocket"
+local COMMAND_ID = "battery_command"
 local SOUND_VOLUME = 1
 local SOUND_EXTENSION_TYPE = "dfpwm"
 local SOUNDS_DIRECTORY_PATH = fs.getDir(shell.getRunningProgram()) .. "./sounds/"
@@ -81,7 +79,7 @@ local function ask_barrage_parameters()
     local target_pos = convert_type(
         config.ask_setting(
             "Target position <X Y Z>?",
-            { "1 2 3" },
+            { "0 0 0" },
             function(i)
                 local coordinate = {}
                 for value in i:gmatch("%S+") do

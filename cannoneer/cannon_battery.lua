@@ -4,8 +4,7 @@ periphemu.create("top", "modem")
 
 --[[ DEPENDENCIES ]]
 
--- package.path = package.path .. ";../modules/?.lua"
-package.path = package.path .. ";./modules/?.lua"
+package.path = package.path .. ";../modules/?.lua"
 local config = require("config")
 local networking = require("networking")
 local utils = require("utils")
@@ -22,7 +21,6 @@ local MAX_PITCH_RPM            = 256
 local REASSEMBLY_COOLDOWN      = 4 / 20 -- Ticks
 local INCOMING_CHANNEL         = 6060
 local OUTGOING_CHANNEL         = 6060
-local BATTERY_ID_PREFIX        = "battery_"
 local VERSION                  = "0.1-unfinished"
 local DISPLAY_STRING           = "=][= CANNON v" .. VERSION .. " =][="
 -- Ideally 2 ticks. But to ensure maximum reliability, do 4 ticks. <= 0.15 degrees is _fine_.
@@ -53,20 +51,20 @@ local function init_settings()
         config.set_setting(
             config.ask_setting(
                 "Cannon controller id?",
-                { BATTERY_ID_PREFIX }
+                {}
             ),
             "my_id"
         )
         config.set_setting(
             config.ask_setting(
                 "Battery command id?",
-                { BATTERY_ID_PREFIX }
+                {}
             ),
             "command_id"
         )
         config.set_setting(
             config.ask_setting(
-                "Cannon position <X Y Z>?",
+                "Cannon shaft position <X Y Z>?",
                 { "0 0 0" },
                 function(i)
                     local coordinate = {}
@@ -372,20 +370,17 @@ local function main()
             command_msg[MY_ID] and
             command_msg[MY_ID]["type"] == "fire_mission"
         then
-            --- @TODO: uncomment later
             -- Note: During the execution of `move_cannon()`, `fire_cannon()`
             -- and reloading, the script will ignore all messages sent to it.
-            -- if CANNON then
-            --     CANNON.setYaw(command_msg[MY_ID]["yaw"])
-            --     CANNON.setPitch(command_msg[MY_ID]["pitch"])
-            --     os.sleep(1.0)
-            --     CANNON.fire()
-            -- else
-            --     move_cannon(command_msg[MY_ID]["yaw"], command_msg[MY_ID]["pitch"])
-            --     fire_cannon()
-            -- end
-            --- @TODO: remove sleep later
-            os.sleep(0.5)
+            if CANNON then
+                CANNON.setYaw(command_msg[MY_ID]["yaw"])
+                CANNON.setPitch(command_msg[MY_ID]["pitch"])
+                os.sleep(1.0) -- Just to be sure.
+                CANNON.fire()
+            else
+                move_cannon(command_msg[MY_ID]["yaw"], command_msg[MY_ID]["pitch"])
+                fire_cannon()
+            end
             networking.send_packet({ type = "fire_mission_completion" })
             os.sleep(RELOAD_TIME)
             networking.send_packet({ type = "has_reloaded" })
@@ -396,26 +391,8 @@ local function main()
     end
 end
 
--- networking.send_packet({ type = "has_reloaded" })
-
-if not CANNON then
-    reassemble_cannon()
-end
+if not CANNON then reassemble_cannon() end
 parallel.waitForAny(main, networking.message_handler)
 
 --- @TODO: when there's a cannon peripheral, there's no need for config to ask for/use:
 --- CANNON_POS, STARTING_YAW, STARTING_PITCH, PITCH_RANGE, YAW_CONTROLLER_SIDE, PITCH_CONTROLLER_SIDE, CANNON_ASSEMBLY_SIDE, CANNON_FIRE_SIDE
-
--- reassemble_cannon()
--- move_cannon(tonumber(arg[1]) or 0, tonumber(arg[2]) or 0)
--- fire_cannon()
-
--- local count = 1
--- while true do
---     print("Turn #" .. count)
---     move_cannon(tonumber(arg[1]) or 0, tonumber(arg[2]) or 0)
---     os.sleep(1.5)
---     move_cannon(0, 0)
---     os.sleep(1.5)
---     count = count + 1
--- end
