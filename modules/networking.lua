@@ -27,14 +27,9 @@ function networking.message_handler()
             _, _, channel, _, incoming_packet, _ = os.pullEvent("modem_message")
         until channel == incoming_channel
 
-        -- If any of these 3 are weird, skip immediately; we don't talk to strangers on the internet.
+        -- If any of these 2 are weird, skip immediately; we don't talk to strangers on the internet.
         if incoming_packet["id"] == nil then goto continue end
         if incoming_packet["time"] == nil then goto continue end
-        if incoming_packet["recipients"] == nil then goto continue end
-
-        -- `recipients` is optional, but due to `ensure_is_table`, we know that length of 0 means it's for everyone.
-        -- If there _is_ a recipient, check if that's us, otherwise skip.
-        if #incoming_packet["recipients"] > 1 and (not utils.contains(incoming_packet["recipients"], my_id)) then goto continue end
         if inbox[incoming_packet["id"]] ~= nil and incoming_packet["time"] < inbox[incoming_packet["id"]]["time"] then goto continue end
 
         inbox[incoming_packet["id"]] = incoming_packet
@@ -55,13 +50,11 @@ function networking.remove_decayed_packets()
 end
 
 --- Wraps and transmits the given message inside a dict with format:
---- `{ id = ..., recipients = ..., time = ..., message = your_message }`
+--- `{ id = ..., time = ..., message = your_message }`
 --- @param message any
---- @param recipients string|table|nil IDs, wrap in table if there's multiple. nil means everyone.
-function networking.send_packet(message, recipients)
+function networking.send_packet(message)
     local packet = {
         ["id"] = my_id,
-        ["recipients"] = utils.ensure_is_table(recipients),
         ["time"] = utils.time_seconds(),
         ["message"] = message,
     }
@@ -69,16 +62,14 @@ function networking.send_packet(message, recipients)
 end
 
 --- Wraps the given message inside a dict with format:
---- `{ id = ..., recipients = ..., time = ..., message = your_message }`
+--- `{ id = ..., time = ..., message = your_message }`
 --- Useful if you want to do encryption stuff or something... hopefully.
 --- @param id string
 --- @param message any
---- @param recipients string|table|nil IDs, wrap in table if there's multiple. nil means everyone.
 --- @return table packet
-function networking.create_packet(id, message, recipients)
+function networking.create_packet(id, message)
     return {
         ["id"] = id,
-        ["recipients"] = utils.ensure_is_table(recipients),
         ["time"] = utils.time_seconds(),
         ["message"] = message,
     }

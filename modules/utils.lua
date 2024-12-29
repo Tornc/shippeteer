@@ -74,6 +74,15 @@ function utils.contains(table, value)
     return false
 end
 
+--- Get the number of keys of a dict.
+--- @param dict table
+--- @return integer
+function utils.count_keys(dict)
+    local count = 0
+    for _ in pairs(dict) do count = count + 1 end
+    return count
+end
+
 --- The current time in seconds with 3 digits of precision.
 --- @return number time Time since 1 January 1970 in the UTC timezone.
 function utils.time_seconds()
@@ -111,15 +120,6 @@ function utils.index_of(table, value)
         if v == value then return i end
     end
     return nil
-end
-
---- Get the length of a dict
---- @param dict table
---- @return integer
-function utils.len_d(dict)
-    local count = 0
-    for _ in pairs(dict) do count = count + 1 end
-    return count
 end
 
 --- Merge 2 or more tables together. Basically `table.insert()`, but in bulk.

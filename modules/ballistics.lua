@@ -47,7 +47,7 @@ end
 --- brute-forcing pitch, and has higher precision to boot.
 --- @param distance number
 --- @param velocity_ms integer Big cannon: number of charges * 40. Medium cannon: 60 + 20 * barrel length (including recoil barrel).
---- @param target_height number Target heigh _relative_ to cannon
+--- @param target_height number Target height _relative_ to cannon
 --- @param cannon_length integer From shaft to muzzle (inclusive)
 --- @param t0 integer Minimum projectile flight time in ticks
 --- @param tn integer Maximum projectile flight time in ticks
