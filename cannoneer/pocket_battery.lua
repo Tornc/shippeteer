@@ -1,7 +1,4 @@
---[[ TESTING ]]
-
--- periphemu.create("top", "modem")
--- periphemu.create("back", "speaker")
+-- Written by Ton, with love. Feel free to modify, consider this under the MIT license.
 
 --[[ DEPENDENCIES ]]
 
