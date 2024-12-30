@@ -1,6 +1,6 @@
 --[[ TESTING ]]
 
-periphemu.create("top", "modem")
+-- periphemu.create("top", "modem")
 
 --[[ DEPENDENCIES ]]
 
@@ -87,7 +87,7 @@ local function init_settings()
         )
         config.set_setting(
             config.ask_setting(
-                "Cannon length?",
+                "Cannon length? (From shaft to muzzle (inclusive))",
                 { "11" },
                 function(i) return tonumber(i) end
             ),
@@ -288,6 +288,9 @@ local function move_cannon(desired_yaw, desired_pitch)
         local delta_yaw = (desired_yaw - current_yaw + 180) % 360 - 180
         local delta_pitch = desired_pitch - current_pitch
 
+        --- @TODO: note that multiplying by sleep interval is not actually optimal, as maximum accuracy _can_
+        --- be achieved even with a larger time-step. You just have to be a bit more conservative with the
+        --- rpm, erring on lower rpm than the fastest theoretically possible, to prevent overshoot.
         yaw_rpm = utils.round(calculate_rpm(delta_yaw, 1 / CBC_GEARDOWN_RATIO * MOVE_SLEEP_INTERVAL, MAX_YAW_RPM))
         pitch_rpm = utils.round(calculate_rpm(delta_pitch, 1 / CBC_GEARDOWN_RATIO * MOVE_SLEEP_INTERVAL, MAX_PITCH_RPM))
 
@@ -391,8 +394,15 @@ local function main()
     end
 end
 
-if not CANNON then reassemble_cannon() end
+if CANNON then
+    if not CANNON.isRunning() then CANNON.assemble() end
+    CANNON.setYaw(0)
+    CANNON.setPitch(0)
+else
+    reassemble_cannon()
+end
 parallel.waitForAny(main, networking.message_handler)
+-- move_cannon(tonumber(arg[1]) or 0, tonumber(arg[2]) or 0)
 
 --- @TODO: when there's a cannon peripheral, there's no need for config to ask for/use:
 --- CANNON_POS, STARTING_YAW, STARTING_PITCH, PITCH_RANGE, YAW_CONTROLLER_SIDE, PITCH_CONTROLLER_SIDE, CANNON_ASSEMBLY_SIDE, CANNON_FIRE_SIDE

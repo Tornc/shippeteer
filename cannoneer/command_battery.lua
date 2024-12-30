@@ -1,6 +1,6 @@
 --[[ TESTING ]]
 
-periphemu.create("top", "modem")
+-- periphemu.create("top", "modem")
 
 --[[ DEPENDENCIES ]]
 
@@ -210,8 +210,10 @@ local function process_inbox()
         end
         if msg["type"] == "has_reloaded" then
             for i, can in ipairs(unavailable_cannons) do
+                -- For some godforsaken reason it doesn't work properly without the break.
                 if can.id == id then
                     table.insert(available_cannons, table.remove(unavailable_cannons, i))
+                    break
                 end
             end
         end
@@ -289,6 +291,7 @@ end
 
 local function main()
     -- Initial ping to begin registering all of the available cannons.
+    os.sleep(1.0) -- Wait until all startup scripts (cannons) are ready.
     add_to_message({ type = "info_request" })
     while true do
         networking.remove_decayed_packets()
@@ -317,3 +320,5 @@ local function main()
 end
 
 parallel.waitForAny(main, networking.message_handler)
+
+--- @TODO: merge pocket into command, since pocket comps can only have 1 peripheral anyway.

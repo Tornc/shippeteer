@@ -1,7 +1,7 @@
 --[[ TESTING ]]
 
-periphemu.create("top", "modem")
-periphemu.create("back", "speaker")
+-- periphemu.create("top", "modem")
+-- periphemu.create("back", "speaker")
 
 --[[ DEPENDENCIES ]]
 
@@ -195,3 +195,4 @@ parallel.waitForAny(main, networking.message_handler)
 --     SOUNDS_DIRECTORY_PATH .. "betty" .. "." .. SOUND_EXTENSION_TYPE
 -- )
 -- play_sound(SOUNDS_DIRECTORY_PATH .. "betty")
+--- @TODO: config for ids
