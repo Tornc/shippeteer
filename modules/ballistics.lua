@@ -77,8 +77,8 @@ function ballistics.calculate_pitch(distance, velocity_ms, target_height, cannon
 
     -- The idea is to start with very large steps and decrease step size
     -- the closer we get to the actual value.
-    local num_halvings = 10            -- This is fine, too many halvings will slow down
-    local acceptable_threshold = 0.001 -- How close to X_R is good enough
+    local num_halvings = 10           -- This is fine, too many halvings will slow down
+    local acceptable_threshold = 0.01 -- How close to X_R is good enough
 
     local function a_R(t)
         -- "watch out for the square root" -Endal
