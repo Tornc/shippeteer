@@ -14,15 +14,17 @@ local MODEM = peripheral.find("modem")
 
 --[[ SETTINGS / CONSTANTS ]]
 
-local T0 = 0
-local TN = 750
+local T0                                 = 0
+local TN                                 = 750
 -- Too lazy to do implement fallback trajectory.
-local PREFERRED_TRAJECTORY = false -- true = low, false = high.
+local PREFERRED_TRAJECTORY               = false -- true = low, false = high.
 local INCOMING_CHANNEL, OUTGOING_CHANNEL = 6060, 6060
-local MY_ID = "battery_command"
-local MAX_LOOP_TIME = 2 / 20
-local FIRE_MISSION_TIMEOUT = 30 -- In seconds
-local SLEEP_INTERVAL = 8 / 20   -- In ticks
+local MY_ID                              = "battery_command"
+local MAX_LOOP_TIME                      = 2 / 20
+local FIRE_MISSION_TIMEOUT               = 60 -- In seconds
+local VERSION                            = "0.2"
+local DISPLAY_STRING                     = "=][= COMMAND v" .. VERSION .. " =][="
+local SLEEP_INTERVAL                     = 6 / 20 -- In ticks
 
 --[[ STATE VARIABLES ]]
 
@@ -148,36 +150,6 @@ local function add_to_message(part, recipient)
     resulting_message[recipient or 1] = part
 end
 
---- If a firing solution exists, sends the required yaw and pitch to a cannon.
---- Returns nil, nil if no suitable cannon has been found.
---- @param target_pos table Vector
---- @return string? cannon_id The cannon that's supposed to fire on the target
---- @return number? t Shell flight time in ticks
-local function order_available_cannon(target_pos)
-    if #available_cannons == 0 then return end
-    for i, can in ipairs(available_cannons) do
-        local yaw, pitch, t = can.calculate(target_pos, PREFERRED_TRAJECTORY)
-        -- Valid solution
-        if yaw and pitch and t then
-            add_to_message({
-                ["type"] = "fire_mission",
-                ["yaw"] = yaw,
-                ["pitch"] = pitch,
-            }, can.id)
-            table.insert(unavailable_cannons, table.remove(available_cannons, i))
-            return can.id, t
-        end
-    end
-
-    --- @TODO: IF NONE ARE VALID
-    --- move target to back of queue
-    --- remember which cannons we tried already (for that specific target)
-    --- Try again with new ones, if it still doesn’t work, keep moving to the back.
-    --- if we really have tried all possible cannons at both trajectories, but
-    --- it still doesn’t work, then discard
-    return nil, nil
-end
-
 -- [[ STATE ]]
 
 local function process_inbox()
@@ -245,9 +217,6 @@ local function handle_barrage_completion()
                 { type = "artillery_barrage_completion" },
                 current_request["id"]
             )
-            print("Cannons av/na:", #available_cannons, #unavailable_cannons)
-            for _, uc in pairs(unavailable_cannons) do write(uc.id .. " ") end
-            print()
         end
         current_request = #barrage_requests > 0 and table.remove(barrage_requests, 1) or {}
     end
@@ -256,21 +225,47 @@ end
 local function allocate_cannons_to_targets()
     local start_time = utils.time_seconds()
     while current_request["coordinates"] and #current_request["coordinates"] > 0 and #available_cannons > 0 do
+        -- Position to be struck
         local target_pos = current_request["coordinates"][1]
-        local can_id, flight_time_ticks = order_available_cannon(target_pos)
-        if can_id and flight_time_ticks then
-            table.remove(current_request["coordinates"], 1)
-            table.insert(wip_fire_missions, {
-                id = can_id,
-                pos = target_pos,
-                flight_time = flight_time_ticks / 20, -- Our current time function works in seconds.
-                fired_time = nil,
-                timeout_time = utils.time_seconds() + FIRE_MISSION_TIMEOUT
-            })
-        else
-            --- @TODO: don't just ignore our problems out of convenience...
-            table.remove(current_request["coordinates"], 1)
+        -- Go through all cannons that are ready to fire. If a firing solution exists,
+        -- send the required yaw and pitch to the suitable cannon.
+        -- Also note that the coordinate we ordered the cannon to fire is now 'work in progress'.
+        for i, a_can in ipairs(available_cannons) do
+            local yaw, pitch, t = a_can.calculate(target_pos, PREFERRED_TRAJECTORY)
+            -- Valid solution
+            if yaw and pitch and t then
+                add_to_message({
+                    ["type"] = "fire_mission",
+                    ["yaw"] = yaw,
+                    ["pitch"] = pitch,
+                }, a_can.id)
+                table.insert(unavailable_cannons, table.remove(available_cannons, i))
+                table.remove(current_request["coordinates"], 1)
+                table.insert(wip_fire_missions, {
+                    id = a_can.id,
+                    pos = target_pos,
+                    flight_time = t / 20, -- Our current time function works in seconds.
+                    fired_time = nil,
+                    timeout_time = utils.time_seconds() + FIRE_MISSION_TIMEOUT
+                })
+                goto continue
+            end
         end
+        -- If we didn't find a valid solution, then we must check if ANY of our cannons
+        -- is able to hit it.
+        for _, u_can in ipairs(unavailable_cannons) do
+            local yaw, pitch, t = u_can.calculate(target_pos, PREFERRED_TRAJECTORY)
+            if yaw and pitch and t then
+                -- Since the cannon that can shoot at it is not available yet,
+                -- move the coordinate to the back of the queue to be struck later,
+                -- when the cannon is more likely to be ready.
+                table.insert(current_request["coordinates"], table.remove(current_request["coordinates"], 1))
+                goto continue
+            end
+        end
+        -- Not a single one of our cannons can hit the target. Let's just give up.
+        table.remove(current_request["coordinates"], 1)
+        ::continue::
         if utils.time_seconds() - start_time > MAX_LOOP_TIME then break end
     end
 end
@@ -293,6 +288,8 @@ local function cleanup_wip_missions()
 end
 
 local function main()
+    print(DISPLAY_STRING)
+    print(string.rep("-", #DISPLAY_STRING))
     -- Initial ping to begin registering all of the available cannons.
     os.sleep(1.0) -- Wait until all startup scripts (cannons) are ready.
     add_to_message({ type = "info_request" })
@@ -310,6 +307,3 @@ local function main()
 end
 
 parallel.waitForAny(main, networking.message_handler)
-
---- @TODO: merge pocket into command, since pocket comps can only have 1 peripheral anyway.
---- @TODO: a significant number of cannons don't become available again... sometimes???

@@ -33,7 +33,7 @@ local END_FIRE = {
     "RU_EndFire4",
 }
 local DECODER = dfpwm.make_decoder()
-local VERSION = "0.1-unfinished"
+local VERSION = "0.2"
 local DISPLAY_STRING = "=][= POCKET v" .. VERSION .. " =][="
 local SLEEP_INTERVAL = 1 / 20
 
@@ -42,7 +42,6 @@ local SLEEP_INTERVAL = 1 / 20
 networking.set_modem(MODEM)
 networking.set_channels(INCOMING_CHANNEL, OUTGOING_CHANNEL)
 networking.set_id(MY_ID)
-networking.set_packet_decay_time(5.0)
 
 local function play_sound(file_name)
     local file_path = SOUNDS_DIRECTORY_PATH .. file_name .. "." .. SOUND_EXTENSION_TYPE
@@ -77,8 +76,7 @@ local function ask_barrage_parameters()
     local target_pos = convert_type(
         config.ask_setting(
             "Target position <X Y Z>?",
-            --- @TODO: set to 0 0 0 later
-            { "585 -29 217", "539 -24 11" },
+            { "0 0 0" },
             function(i)
                 local coordinate = {}
                 for value in i:gmatch("%S+") do
@@ -100,8 +98,7 @@ local function ask_barrage_parameters()
     local spacing = convert_type(
         config.ask_setting(
             "Spacing?",
-            --- @TODO: set to 0 later
-            { "5" },
+            { "0" },
             function(i) return tonumber(i) >= 0 end
         ),
         function(i) return tonumber(i) end
@@ -109,8 +106,7 @@ local function ask_barrage_parameters()
     local semi_width = convert_type(
         config.ask_setting(
             "Semi-width?",
-            --- @TODO: set to 0 later
-            { "25" },
+            { "0" },
             function(i) return tonumber(i) >= 0 end
         ),
         function(i) return tonumber(i) end
@@ -118,8 +114,7 @@ local function ask_barrage_parameters()
     local semi_height = convert_type(
         config.ask_setting(
             "Semi-height?",
-            --- @TODO: set to 0 later
-            { "25" },
+            { "0" },
             function(i) return tonumber(i) >= 0 end
         ),
         function(i) return tonumber(i) end
@@ -152,7 +147,6 @@ local function await_barrage_completion()
     print("Your order of destruction is being carried out.")
     print("Please be patient. Thank you. \x02")
     while true do
-        networking.remove_decayed_packets()
         local command_msg = networking.get_message(COMMAND_ID)
         if
             command_msg and

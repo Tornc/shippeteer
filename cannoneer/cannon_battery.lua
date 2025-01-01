@@ -19,11 +19,15 @@ local MAX_PITCH_RPM            = 256
 local REASSEMBLY_COOLDOWN      = 4 / 20 -- Ticks
 local INCOMING_CHANNEL         = 6060
 local OUTGOING_CHANNEL         = 6060
-local VERSION                  = "0.1-unfinished"
+local VERSION                  = "0.2"
 local DISPLAY_STRING           = "=][= CANNON v" .. VERSION .. " =][="
 -- Ideally 2 ticks. But to ensure maximum reliability, do 4 ticks. <= 0.15 degrees is _fine_.
+-- Plus, 4 won't break without requiring Create: Tweaked Controllers
 local MOVE_SLEEP_INTERVAL      = 4 / 20
-local MAIN_LOOP_SLEEP_INTERVAL = 4 / 20
+-- This must ALWAYS be faster than COMMAND loop, as command_msg[MY_ID] will get overwritten/
+-- reduced to nil whenever a new command packet arrives. If MAIN_LOOP_SLEEP_INTERVAL is too
+-- large, it may get turned to nil before it can be read, leading to timeouts.
+local MAIN_LOOP_SLEEP_INTERVAL = 2 / 20
 
 --[[ SETTINGS ]]
 
@@ -231,7 +235,6 @@ local current_pitch
 networking.set_modem(MODEM)
 networking.set_channels(INCOMING_CHANNEL, OUTGOING_CHANNEL)
 networking.set_id(MY_ID)
-networking.set_packet_decay_time(5.0)
 
 --[[ PERIPHERALS SETUP ]]
 
@@ -342,8 +345,6 @@ local function main()
     if arg[1] == string.lower(ARG_PRINT_SETTINGS) then print_settings() end
 
     while true do
-        networking.remove_decayed_packets()
-
         local command_msg = networking.get_message(COMMAND_ID)
         if not command_msg then goto continue end
         if networking.has_been_read(COMMAND_ID) then goto continue end
@@ -364,7 +365,6 @@ local function main()
                 }
             )
         end
-        --- @TODO: maybe it's because the command_msg gets overwritten and MY_ID entry disappears?
         if
             command_msg and
             command_msg[MY_ID] and
@@ -406,8 +406,6 @@ parallel.waitForAny(main, networking.message_handler)
 --- @TODO: note that multiplying by sleep interval is not actually optimal, as maximum accuracy _can_
 --- be achieved even with a larger time-step. You just have to be a bit more conservative with the
 --- rpm, erring on lower rpm than the fastest theoretically possible, to prevent overshoot.
---- OR: we sleep for MOVE_SLEEP_INTERVAL ticks at MINIMUM after every time we set speed for one of/both of the rot controllers.
---- otherwise, sleep 1 tick.
 --- OR: we notice how long each async call has taken, by wrapping the setSpeed call within a function (that's then wrapped in async) that compares time before and after.
 --- then, we just update current degree with the end result. (rpm_dds(rpm / CBC_GEARDOWN_RATIO) * dt)
 --- And if the async call has not yielded a result yet, then we skip a loop iteration.
