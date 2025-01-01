@@ -20,9 +20,9 @@ local TN = 750
 local PREFERRED_TRAJECTORY = false -- true = low, false = high.
 local INCOMING_CHANNEL, OUTGOING_CHANNEL = 6060, 6060
 local MY_ID = "battery_command"
-local MAX_LOOP_TIME = 0.05
-local FIRE_MISSION_TIMEOUT = 60 -- In seconds
-local SLEEP_INTERVAL = 4 / 20   -- In ticks
+local MAX_LOOP_TIME = 2 / 20
+local FIRE_MISSION_TIMEOUT = 30 -- In seconds
+local SLEEP_INTERVAL = 8 / 20   -- In ticks
 
 --[[ STATE VARIABLES ]]
 
@@ -148,6 +148,7 @@ local function add_to_message(part, recipient)
     resulting_message[recipient or 1] = part
 end
 
+--- If a firing solution exists, sends the required yaw and pitch to a cannon.
 --- Returns nil, nil if no suitable cannon has been found.
 --- @param target_pos table Vector
 --- @return string? cannon_id The cannon that's supposed to fire on the target
@@ -182,7 +183,7 @@ end
 local function process_inbox()
     for id, _ in pairs(networking.get_inbox()) do
         local packet = networking.get_packet(id)
-        local msg = networking.get_message(id)
+        local msg = packet["message"]
         if networking.has_been_read(id) then goto continue end
         networking.mark_as_read(id)
         -- Note: this overwrites existing cannons with more up to date information.
@@ -201,14 +202,14 @@ local function process_inbox()
             -- We can assume that the oldest entry with a matching id but without
             -- a fired_time, is the one that has just been completed.
             for _, fire_mission in pairs(wip_fire_missions) do
-                if fire_mission.id == id and not fire_mission.fired_time then
+                if fire_mission.id == id and fire_mission.fired_time == nil then
                     fire_mission.fired_time = packet["time"]
+                    break
                 end
             end
         end
         if msg["type"] == "has_reloaded" then
             for i, can in ipairs(unavailable_cannons) do
-                -- For some godforsaken reason it doesn't work properly without the break.
                 if can.id == id then
                     table.insert(available_cannons, table.remove(unavailable_cannons, i))
                     break
@@ -244,6 +245,9 @@ local function handle_barrage_completion()
                 { type = "artillery_barrage_completion" },
                 current_request["id"]
             )
+            print("Cannons av/na:", #available_cannons, #unavailable_cannons)
+            for _, uc in pairs(unavailable_cannons) do write(uc.id .. " ") end
+            print()
         end
         current_request = #barrage_requests > 0 and table.remove(barrage_requests, 1) or {}
     end
@@ -281,6 +285,7 @@ local function cleanup_wip_missions()
         then
             table.remove(wip_fire_missions, i)
         elseif utils.time_seconds() > fire_mission.timeout_time then
+            print(fire_mission.id .. " has timed out!")
             -- Transfer the coordinates back to current_request to try again.
             table.insert(current_request["coordinates"], table.remove(wip_fire_missions, i).pos)
         end
@@ -292,19 +297,6 @@ local function main()
     os.sleep(1.0) -- Wait until all startup scripts (cannons) are ready.
     add_to_message({ type = "info_request" })
     while true do
-        networking.remove_decayed_packets()
-        -- term.clear()
-        -- print("Current request:")
-        -- pretty.pretty_print(current_request)
-        -- print("WIP fire missions:")
-        -- pretty.pretty_print(wip_fire_missions)
-        -- if wip_fire_missions[1] and wip_fire_missions[1].fired_time then
-        --     print("Time until next impact:",
-        --         wip_fire_missions[1].flight_time - utils.time_seconds() + wip_fire_missions[1].fired_time
-        --     )
-        -- end
-        -- print("Cannons av/na:", #available_cannons, #unavailable_cannons)
-
         process_inbox()
         handle_barrage_completion()
         allocate_cannons_to_targets()
@@ -320,3 +312,4 @@ end
 parallel.waitForAny(main, networking.message_handler)
 
 --- @TODO: merge pocket into command, since pocket comps can only have 1 peripheral anyway.
+--- @TODO: a significant number of cannons don't become available again... sometimes???

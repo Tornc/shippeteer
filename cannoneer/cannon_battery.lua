@@ -23,7 +23,7 @@ local VERSION                  = "0.1-unfinished"
 local DISPLAY_STRING           = "=][= CANNON v" .. VERSION .. " =][="
 -- Ideally 2 ticks. But to ensure maximum reliability, do 4 ticks. <= 0.15 degrees is _fine_.
 local MOVE_SLEEP_INTERVAL      = 4 / 20
-local MAIN_LOOP_SLEEP_INTERVAL = 6 / 20
+local MAIN_LOOP_SLEEP_INTERVAL = 4 / 20
 
 --[[ SETTINGS ]]
 
@@ -32,7 +32,7 @@ local COMMAND_ID             -- String
 local CANNON_POS             -- Vector(X, Y, Z)
 local CANNON_LENGTH          -- From shaft to muzzle (inclusive)
 local CANNON_TYPE            -- "big" or "medium"
-local PROJECTILE_VELOCITY_MS -- # of charges * 40
+local PROJECTILE_VELOCITY_MS -- number of charges * 40
 local RELOAD_TIME            -- Seconds
 local STARTING_YAW           -- Degrees
 local STARTING_PITCH         -- Degrees
@@ -231,6 +231,7 @@ local current_pitch
 networking.set_modem(MODEM)
 networking.set_channels(INCOMING_CHANNEL, OUTGOING_CHANNEL)
 networking.set_id(MY_ID)
+networking.set_packet_decay_time(5.0)
 
 --[[ PERIPHERALS SETUP ]]
 
@@ -286,9 +287,6 @@ local function move_cannon(desired_yaw, desired_pitch)
         local delta_yaw = (desired_yaw - current_yaw + 180) % 360 - 180
         local delta_pitch = desired_pitch - current_pitch
 
-        --- @TODO: note that multiplying by sleep interval is not actually optimal, as maximum accuracy _can_
-        --- be achieved even with a larger time-step. You just have to be a bit more conservative with the
-        --- rpm, erring on lower rpm than the fastest theoretically possible, to prevent overshoot.
         yaw_rpm = utils.round(calculate_rpm(delta_yaw, 1 / CBC_GEARDOWN_RATIO * MOVE_SLEEP_INTERVAL, MAX_YAW_RPM))
         pitch_rpm = utils.round(calculate_rpm(delta_pitch, 1 / CBC_GEARDOWN_RATIO * MOVE_SLEEP_INTERVAL, MAX_PITCH_RPM))
 
@@ -302,14 +300,14 @@ local function move_cannon(desired_yaw, desired_pitch)
             utils.run_async(YAW_CONTROLLER.setTargetSpeed, -yaw_rpm)
         end
         if pitch_rpm ~= PITCH_CONTROLLER.getTargetSpeed() then
-            utils.run_async(PITCH_CONTROLLER.setTargetSpeed, -pitch_rpm)
+            utils.run_async(PITCH_CONTROLLER.setTargetSpeed, pitch_rpm)
         end
 
         if
             yaw_rpm + pitch_rpm == 0 and
             YAW_CONTROLLER.getTargetSpeed() + PITCH_CONTROLLER.getTargetSpeed() == 0
         then
-            print(current_yaw, current_pitch)
+            print("I think:", current_yaw, current_pitch)
             break
         end
 
@@ -366,6 +364,7 @@ local function main()
                 }
             )
         end
+        --- @TODO: maybe it's because the command_msg gets overwritten and MY_ID entry disappears?
         if
             command_msg and
             command_msg[MY_ID] and
@@ -374,9 +373,9 @@ local function main()
             -- Note: During the execution of `move_cannon()`, `fire_cannon()`
             -- and reloading, the script will ignore all messages sent to it.
             if CANNON then
-                CANNON.setYaw(command_msg[MY_ID]["yaw"])
+                CANNON.setYaw(command_msg[MY_ID]["yaw"] % 360)
                 CANNON.setPitch(command_msg[MY_ID]["pitch"])
-                os.sleep(1.0) -- Just to be sure.
+                os.sleep(1.0)
                 CANNON.fire()
             else
                 move_cannon(command_msg[MY_ID]["yaw"], command_msg[MY_ID]["pitch"])
@@ -401,6 +400,17 @@ else
 end
 parallel.waitForAny(main, networking.message_handler)
 -- move_cannon(tonumber(arg[1]) or 0, tonumber(arg[2]) or 0)
+
+--- @TODO: fix reassemble_cannon() not working on startup
+
+--- @TODO: note that multiplying by sleep interval is not actually optimal, as maximum accuracy _can_
+--- be achieved even with a larger time-step. You just have to be a bit more conservative with the
+--- rpm, erring on lower rpm than the fastest theoretically possible, to prevent overshoot.
+--- OR: we sleep for MOVE_SLEEP_INTERVAL ticks at MINIMUM after every time we set speed for one of/both of the rot controllers.
+--- otherwise, sleep 1 tick.
+--- OR: we notice how long each async call has taken, by wrapping the setSpeed call within a function (that's then wrapped in async) that compares time before and after.
+--- then, we just update current degree with the end result. (rpm_dds(rpm / CBC_GEARDOWN_RATIO) * dt)
+--- And if the async call has not yielded a result yet, then we skip a loop iteration.
 
 --- @TODO: when there's a cannon peripheral, there's no need for config to ask for/use:
 --- CANNON_POS, STARTING_YAW, STARTING_PITCH, PITCH_RANGE, YAW_CONTROLLER_SIDE, PITCH_CONTROLLER_SIDE, CANNON_ASSEMBLY_SIDE, CANNON_FIRE_SIDE

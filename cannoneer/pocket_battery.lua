@@ -42,6 +42,7 @@ local SLEEP_INTERVAL = 1 / 20
 networking.set_modem(MODEM)
 networking.set_channels(INCOMING_CHANNEL, OUTGOING_CHANNEL)
 networking.set_id(MY_ID)
+networking.set_packet_decay_time(5.0)
 
 local function play_sound(file_name)
     local file_path = SOUNDS_DIRECTORY_PATH .. file_name .. "." .. SOUND_EXTENSION_TYPE
@@ -76,7 +77,8 @@ local function ask_barrage_parameters()
     local target_pos = convert_type(
         config.ask_setting(
             "Target position <X Y Z>?",
-            { "0 0 0" },
+            --- @TODO: set to 0 0 0 later
+            { "585 -29 217", "539 -24 11" },
             function(i)
                 local coordinate = {}
                 for value in i:gmatch("%S+") do
@@ -98,7 +100,8 @@ local function ask_barrage_parameters()
     local spacing = convert_type(
         config.ask_setting(
             "Spacing?",
-            { "0" },
+            --- @TODO: set to 0 later
+            { "5" },
             function(i) return tonumber(i) >= 0 end
         ),
         function(i) return tonumber(i) end
@@ -106,7 +109,8 @@ local function ask_barrage_parameters()
     local semi_width = convert_type(
         config.ask_setting(
             "Semi-width?",
-            { "0" },
+            --- @TODO: set to 0 later
+            { "25" },
             function(i) return tonumber(i) >= 0 end
         ),
         function(i) return tonumber(i) end
@@ -114,7 +118,8 @@ local function ask_barrage_parameters()
     local semi_height = convert_type(
         config.ask_setting(
             "Semi-height?",
-            { "0" },
+            --- @TODO: set to 0 later
+            { "25" },
             function(i) return tonumber(i) >= 0 end
         ),
         function(i) return tonumber(i) end
