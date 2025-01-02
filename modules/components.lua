@@ -12,7 +12,9 @@ local component = setmetatable({}, {})
 --- This will save you a headache down the line.
 --- @param ... any
 local function params_nil_check(...)
-    for i, param in ipairs({ ... }) do
+    local count = select("#", ...) -- Count of arguments including `nil`
+    for i = 1, count do
+        local param = select(i, ...)
         assert(param ~= nil, "Parameter #" .. i .. " is nil!")
     end
 end
