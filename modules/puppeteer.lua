@@ -21,8 +21,6 @@ local HULL_YAW_THRESHOLD = 1
 local HULL_YAW_ROTATE_THRESHOLD = 20
 local ARRIVAL_DISTANCE_THESHOLD = 4
 
---- @TODO: this does not deal well with changes in desired_yaw due to movement.
--- local TURRET_PID_CONTROLLER = pid.controller().create(0.5, 0.45, 0.07)
 local TURRET_PID_CONTROLLER = pid.controller().create(0.5, 0.45, 0.07)
 
 --[[ FUNCTIONS ]]
@@ -58,7 +56,7 @@ local function is_vector(var)
     return type(var) == "table" and getmetatable(var).__name == "vector"
 end
 
---- # IMPORTANT: this only works for tracked vehicles, not wheeled vehicles!
+--- # IMPORTANT: this only works for tracked vehicles, not wheeled vehicles! (atm)
 --- @param comp table
 --- @param pos table Vector
 --- @param reverse boolean?
@@ -291,7 +289,8 @@ function puppeteer.aim_at(comp, target, line, timeout)
     end, line, timeout)
 end
 
---- Rotates the turret such that it faces the target and keeps it that way until told otherwise. Example usage:
+--- Rotates the turret such that it faces the target and keeps it that way until told otherwise.
+--- <br> Example usage:
 --- ```
 --- local action = puppeteer.lock_on(comp, target, timeout)
 --- action.terminate()
@@ -348,6 +347,27 @@ function puppeteer.stop_rot_controller(comp, line, timeout)
     return async.action().create(function()
         local rot_controller = comp.get_rotational_controller()
         utils.run_async(rot_controller.setTargetSpeed, 0)
+    end, line, timeout)
+end
+
+--- Rotates the turret in a certain direction at a constant speed. Possible use-case: 
+--- the spinning of the T-90M that got pummeled by Bradleys.
+--- @param comp table Component
+--- @param rpm integer -256 to 256. setTargetSpeed() handles the clamping already.
+--- @param duration number? Duration of rotation. Leave as nil to rotate indefinitely. Then you'll have to terminate externally.
+--- @param line integer?
+--- @param timeout number?
+--- @return table
+function puppeteer.rotate_turret(comp, rpm, duration, line, timeout)
+    return async.action().create(function()
+        local rot_controller = comp.get_rotational_controller()
+        utils.run_async(rot_controller.setTargetSpeed, rpm)
+        if duration then
+            async.pause(duration)
+            utils.run_async(rot_controller.setTargetSpeed, 0)
+        else
+            while true do async.pause() end
+        end
     end, line, timeout)
 end
 
