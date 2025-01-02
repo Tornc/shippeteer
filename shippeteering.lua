@@ -26,6 +26,8 @@ local ROT_CONTROLLER_TEST_TURRET = peripheral.wrap("Create_RotationSpeedControll
 
 local INCOMING_CHANNEL, OUTGOING_CHANNEL = 6060, 6060
 local MY_ID = "shippeteer"
+local VERSION = "0.2-dev"
+local DISPLAY_STRING = "=][= SHIPPETEER v" .. VERSION .. " =][="
 local SLEEP_INTERVAL = 1 / 20
 
 --[[ STATE VARIABLES ]]
@@ -89,6 +91,8 @@ local function update_information()
 end
 
 local function main()
+    print(DISPLAY_STRING)
+    print(string.rep("-", #DISPLAY_STRING))
     while true do
         networking.remove_decayed_packets()
         update_information()
@@ -132,14 +136,15 @@ end
 local function script2()
     print("Starting actions.")
     -- local lock = puppeteer.lock_on(VEHICLE_TEST.turret, xz(30, 0))
-    local lock = puppeteer.lock_on_degrees(VEHICLE_TEST.turret, 180)
+    local lock = puppeteer.lock_on(VEHICLE_TEST.turret, 180)
     async.pause_until_terminated(lock)
     print("Finished performing actions.")
 end
 
-parallel.waitForAll(main, networking.message_handler, script2)
+parallel.waitForAll(main, networking.message_handler, script)
+
+--- @TODO: assert every goddamn create() parameter in component
 
 --- @TODO: rework components module to use ':' - sombrero
---- @TODO: tune LQR further to allow for firing on the move.
 --- @TODO: follow(comp, comp2)
 --- @LATER: create an installer that downloads all the modules
