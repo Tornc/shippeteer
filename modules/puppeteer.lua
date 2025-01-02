@@ -35,7 +35,7 @@ end
 --- @param comp_pos table Vector
 --- @param target_pos table Vector
 --- @return number result In degrees
-function puppeteer.calculate_yaw(comp_pos, target_pos)
+local function calculate_yaw(comp_pos, target_pos)
     local delta_x = target_pos.x - comp_pos.x
     local delta_z = target_pos.z - comp_pos.z
     return math.deg(math.atan2(delta_x, delta_z))
@@ -84,7 +84,7 @@ function puppeteer.move_to(comp, pos, reverse, line, timeout)
                 if has_arrived(comp_pos, pos, ARRIVAL_DISTANCE_THESHOLD) then break end
                 -- We flip the desired_yaw if we're going in reverse, because the rear
                 -- must face towards the destination.
-                local desired_yaw = puppeteer.calculate_yaw(comp_pos, pos)
+                local desired_yaw = calculate_yaw(comp_pos, pos)
                 desired_yaw = reverse and ((desired_yaw + 360) % 360) - 180 or desired_yaw
                 local current_yaw = comp_info["orientation"]["yaw"]
                 local delta_yaw = ((desired_yaw - current_yaw + 180) % 360) - 180
@@ -279,7 +279,7 @@ function puppeteer.aim_at(comp, target, line, timeout)
 
             --- @TODO: take velocity into account; calculate future_comp_pos
             is_done = manage_target_rpm(
-                puppeteer.calculate_yaw(comp_pos, target_pos),
+                calculate_yaw(comp_pos, target_pos),
                 comp,
                 rot_controller,
                 TURRET_YAW_THRESHOLD
@@ -299,7 +299,7 @@ end
 --- puppeteer.turret_to_idle(comp, timeout) -- Or use this.
 --- ```
 --- @param comp table Component
---- @param target table Vector or component
+--- @param target number|table Yaw (degrees)/Vector/Component
 --- @param line integer?
 --- @param timeout number?
 --- @return table
@@ -307,37 +307,32 @@ function puppeteer.lock_on(comp, target, line, timeout)
     -- This function is identical to aim_at, except for the fact that YAW_DEGREE_THRESHOLD is
     -- not needed. Maybe rewrite both to reduce code duplication.
     return async.action().create(function()
-        local target_pos
-        local is_vec = is_vector(target)
-        if is_vec then target_pos = target end
         local rot_controller = comp.get_rotational_controller()
+        local desired_yaw, target_pos
+        local is_yaw = type(target) == "number"
+        local is_vec = is_vector(target)
+        if is_yaw then desired_yaw = target end
+        if is_vec then target_pos = target end
 
         while true do
             local comp_info = comp.get_info()
             local comp_pos = comp_info and utils.tbl_to_vec(comp_info["position"])
             if not comp_info then goto continue end -- _sigh_
-            if not is_vec then
+
+            --- @TODO: take velocity into account;
+            --- calculate future_comp_pos and future_target_pos (if applies)
+            if not (is_yaw or is_vec) then -- aka Component
                 local target_comp_info = target.get_info()
                 if not target_comp_info then goto continue end
                 target_pos = utils.tbl_to_vec(target_comp_info["position"])
             end
-
-            --- @TODO: take velocity into account; calculate future_comp_pos
-            manage_target_rpm(puppeteer.calculate_yaw(comp_pos, target_pos), comp, rot_controller)
-
-            ::continue::
-            async.pause()
-        end
-    end, line, timeout)
-end
-
---- @TODO: merge this with lock_on
-function puppeteer.lock_on_degrees(comp, desired_yaw, line, timeout)
-    return async.action().create(function()
-        local rot_controller = comp.get_rotational_controller()
-        while true do
-            if not comp.get_info() then goto continue end
+            -- Debugger freaks out a bit because when setting desired_yaw/target_pos to target,
+            -- it thinks the is_yaw and is_vec don't exist.
+            --- @diagnostic disable-next-line: param-type-mismatch
+            if not is_yaw then desired_yaw = calculate_yaw(comp_pos, target_pos) end
+            --- @diagnostic disable-next-line: param-type-mismatch
             manage_target_rpm(desired_yaw, comp, rot_controller)
+
             ::continue::
             async.pause()
         end

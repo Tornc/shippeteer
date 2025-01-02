@@ -8,6 +8,15 @@ local utils = require("utils")
 
 local component = setmetatable({}, {})
 
+--- Ensures all parameters are not nil. Please use it whenever possible.
+--- This will save you a headache down the line.
+--- @param ... any
+local function params_nil_check(...)
+    for i, param in ipairs({ ... }) do
+        assert(param ~= nil, "Parameter #" .. i .. " is nil!")
+    end
+end
+
 function component.ship()
     local self = setmetatable({}, {})
 
@@ -42,6 +51,7 @@ local function movable()
     local super_create = self.create
 
     function self.create(name, start_pos)
+        params_nil_check(name, start_pos)
         super_create(name, start_pos)
         self.ship_info = {}
         self.child_components = {} -- Table of things that inherit from ship, can be left as nil
@@ -109,6 +119,7 @@ function component.simple_tracked_hull()
     --- @return table
     function self.create(name, start_pos,
                          relay, forward, left, right, reverse, track_rpm)
+        params_nil_check(name, start_pos, relay, forward, left, right, reverse, track_rpm)
         super_create(name, start_pos)
         self.relay = relay -- Peripheral
         self.forward = forward
@@ -146,6 +157,7 @@ local function weapon()
     local self = setmetatable({}, {})
 
     function self.create(name, relay, links)
+        params_nil_check(name, relay, links)
         self.name = name
         self.relay = relay
         self.links = links
@@ -184,6 +196,7 @@ local function continuous_weapon()
     --- @param fire_rate integer
     --- @return table
     function self.create(name, relay, links, fire_rate)
+        params_nil_check(name, relay, links, fire_rate)
         super_create(name, relay, links)
         self.fire_rate = fire_rate
         self.type = "continuous"
@@ -208,6 +221,7 @@ local function non_continuous_weapon()
     --- @param reload_time number
     --- @return table
     function self.create(name, relay, links, reload_time)
+        params_nil_check(name, relay, links, reload_time)
         super_create(name, relay, links)
         self.reload_time = reload_time
         self.time_last_fired = utils.time_seconds()
@@ -244,6 +258,7 @@ function component.turret()
     --- @return table
     function self.create(name, start_pos,
                          relay, rotation_controller)
+        params_nil_check(name, start_pos, relay, rotation_controller)
         super_create(name, start_pos)
         self.relay = relay                               -- Peripheral
         self.rotational_controller = rotation_controller -- Peripheral
