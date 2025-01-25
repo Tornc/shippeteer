@@ -10,8 +10,11 @@ local elements = setmetatable({}, {})
 
 --[[ STATE VARIABLES ]]
 
+local SCREEN
 local SCREEN_WIDTH
 local SCREEN_HEIGHT
+
+function elements.set_screen(screen) SCREEN = screen end
 
 function elements.set_screen_width(width) SCREEN_WIDTH = width end
 
@@ -43,56 +46,90 @@ function elements.element()
         return self
     end
 
-    --- @TODO: fix the corners between segments for thick lines!
-    function self.draw(screen)
-        for i, point in ipairs(self.points) do
-            local next_point = self.points[i + 1]
-            if next_point then
-                local p1 = (point * self.size) + self.center_point
-                local p2 = (next_point * self.size) + self.center_point
+    function self.draw()
+        -- Fuck you, floats!
+        local is_closed_shape = (self.points[1] - self.points[#self.points]):length() < 0.0001
+        local num_points = #self.points
 
-                local is_p1_outside, is_p2_outside = is_out_of_bounds(p1), is_out_of_bounds(p2)
-                if is_p1_outside and is_p2_outside then goto continue end
-                if is_p1_outside then
-                    p1.x = utils.clamp(p1.x, 0, SCREEN_WIDTH)
-                    p1.y = utils.clamp(p1.y, 0, SCREEN_HEIGHT)
-                end
-                if is_p2_outside then
-                    p2.x = utils.clamp(p2.x, 0, SCREEN_WIDTH)
-                    p2.y = utils.clamp(p2.y, 0, SCREEN_HEIGHT)
-                end
+        for i = 1, num_points do
+            local point = self.points[i]
+            local next_point = self.points[i + 1] or (is_closed_shape and self.points[1])
+            if not next_point then goto continue end
+            local p1 = ((point * self.size) + self.center_point):round()
+            local p2 = ((next_point * self.size) + self.center_point):round()
+            if p1 == p2 then goto continue end
 
-                if self.line_width == 1 then
-                    screen.DrawLine(
-                        utils.round(p1.x), utils.round(p1.y),
-                        utils.round(p2.x), utils.round(p2.y),
-                        self.colour, 0
-                    )
-                else
-                    local dir = (p2 - p1):normalize()
-                    local perp = vector2d.new(-dir.y, dir.x)
-                    local offset = perp * (self.line_width / 2)
+            local is_p1_outside, is_p2_outside = is_out_of_bounds(p1), is_out_of_bounds(p2)
+            if is_p1_outside and is_p2_outside then goto continue end
+            if is_p1_outside then
+                p1.x = utils.clamp(p1.x, 0, SCREEN_WIDTH)
+                p1.y = utils.clamp(p1.y, 0, SCREEN_HEIGHT)
+            end
+            if is_p2_outside then
+                p2.x = utils.clamp(p2.x, 0, SCREEN_WIDTH)
+                p2.y = utils.clamp(p2.y, 0, SCREEN_HEIGHT)
+            end
 
-                    -- 4 corners of the thick line
-                    local p1_start = p1 - offset
-                    local p1_end = p1 + offset
-                    local p2_start = p2 - offset
-                    local p2_end = p2 + offset
+            if self.line_width == 1 then
+                SCREEN.DrawLine(
+                    p1.x, p1.y,
+                    p2.x, p2.y,
+                    self.colour, 0
+                )
+            else
+                local dir = (p2 - p1):normalize()
+                local perp = vector2d.new(-dir.y, dir.x)
+                local offset = perp * (self.line_width / 2)
 
-                    -- Draw the thick line as a filled quad
-                    screen.DrawTriangle(
-                        utils.round(p1_start.x), utils.round(p1_start.y),
-                        utils.round(p2_start.x), utils.round(p2_start.y),
-                        utils.round(p2_end.x), utils.round(p2_end.y),
-                        self.colour, self.colour, self.colour, 0
-                    )
-                    screen.DrawTriangle(
-                        utils.round(p1_start.x), utils.round(p1_start.y),
-                        utils.round(p2_end.x), utils.round(p2_end.y),
-                        utils.round(p1_end.x), utils.round(p1_end.y),
-                        self.colour, self.colour, self.colour, 0
-                    )
-                end
+                -- 4 corners of the thick line
+                local p1_start = (p1 - offset):round()
+                local p1_end = (p1 + offset):round()
+                local p2_start = (p2 - offset):round()
+                local p2_end = (p2 + offset):round()
+
+                -- Draw the thick line as a filled quad
+                SCREEN.DrawTriangle(
+                    p1_start.x, p1_start.y,
+                    p2_start.x, p2_start.y,
+                    p2_end.x, p2_end.y,
+                    self.colour, self.colour, self.colour, 0
+                )
+                SCREEN.DrawTriangle(
+                    p1_start.x, p1_start.y,
+                    p2_end.x, p2_end.y,
+                    p1_end.x, p1_end.y,
+                    self.colour, self.colour, self.colour, 0
+                )
+
+                -- Handle the joint with the next segment
+                local next_next_point = self.points[i + 2] or (is_closed_shape and self.points[2])
+                if not next_next_point then goto continue end
+                local p3 = ((next_next_point * self.size) + self.center_point):round()
+                if p2 == p3 then goto continue end
+
+                local dir2 = (p3 - p2):normalize()
+                local perp2 = vector2d.new(-dir2.y, dir2.x)
+                local offset2 = perp2 * (self.line_width / 2)
+
+                -- Calculate the intersection point for the joint
+                local joint_start = (p2 - offset):round()
+                local joint_end = (p2 + offset):round()
+                local joint_start2 = (p2 - offset2):round()
+                local joint_end2 = (p2 + offset2):round()
+
+                -- Fill the joint
+                SCREEN.DrawTriangle(
+                    joint_start.x, joint_start.y,
+                    joint_start2.x, joint_start2.y,
+                    joint_end.x, joint_end.y,
+                    self.colour, self.colour, self.colour, 0
+                )
+                SCREEN.DrawTriangle(
+                    joint_start2.x, joint_start2.y,
+                    joint_end2.x, joint_end2.y,
+                    joint_end.x, joint_end.y,
+                    self.colour, self.colour, self.colour, 0
+                )
             end
             ::continue::
         end
@@ -122,6 +159,34 @@ function elements.rectangle()
             vector2d.new(half_width, half_height),   -- Bottom-right
             vector2d.new(-half_width, half_height),  -- Bottom-left
             vector2d.new(-half_width, -half_height), -- Closing: Top-left
+        }
+        super_create(points, center_point, size, line_width, colour)
+        return self
+    end
+
+    return self
+end
+
+function elements.diamond()
+    local self = elements.element()
+    local super_create = self.create
+
+    --- @param center_point Vector2D
+    --- @param aspect_ratio number Ex: 16 / 9, where width is size.
+    --- @param size integer
+    --- @param line_width integer
+    --- @param colour integer
+    --- @return table
+    function self.create(center_point, aspect_ratio, size, line_width, colour)
+        local half_height = 1 / aspect_ratio * 0.5
+        local half_width = 0.5
+
+        local points = {
+            vector2d.new(0, -half_height), -- Top-middle
+            vector2d.new(half_width, 0),   -- Middle-right
+            vector2d.new(0, half_height),  -- Bottom-middle
+            vector2d.new(-half_width, 0),  -- Middle-left
+            vector2d.new(0, -half_height), -- Closing: -- Top-middle
         }
         super_create(points, center_point, size, line_width, colour)
         return self

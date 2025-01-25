@@ -42,6 +42,7 @@ function ballistics.estimate_max_range(cannon_length, initial_velocity_ms)
     return estimated_max_range
 end
 
+--- @TODO: replace is_med_cannon with g and c_d.
 --- All calculations come from Endal's ballistics calculator made in Desmos (https://www.desmos.com/calculator/az4angyumw),
 --- there may be bugs because the formulas sure look like some kind of alien language to me. It's >60x faster than
 --- brute-forcing pitch, and has higher precision to boot.

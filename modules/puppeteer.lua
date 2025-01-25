@@ -481,6 +481,7 @@ local function fire_all(comp, duration)
     end)
 end
 
+--- @TODO: sometimes, you just want to fire an autocannon at a slower fire rate
 --- @param comp table
 --- @param weapon_name string? If nil, then fire all weapons.
 --- @param duration number Required if your component has a continuous weapon.
