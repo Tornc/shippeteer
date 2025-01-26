@@ -4,13 +4,15 @@ local config = require("config")
 local elements = require("elements")
 local font = require("cc_font")
 local utils = require("utils")
-local vector2d = require("vector2d")
+local transforms_3d = require("transforms_3d")
+local vector2d = require("vector2d") -- Not to be confused with vector
 local pretty = require("cc.pretty")
 
 --[[ PERIPHERALS ]]
 
 local HOLOGRAM = peripheral.find("hologram")
 local PLAYER_DETECTOR = peripheral.find("playerDetector")
+local MONITOR = peripheral.find("monitor")
 
 --[[ CONSTANTS / SETTINGS ]]
 
@@ -21,10 +23,12 @@ local HMD_TEXT_COLOUR = 0x00FF00FF
 local HMD_SCREEN_WIDTH = 1024 -- 1024x1024 is max
 local HMD_SCREEN_HEIGHT = utils.round(HMD_SCREEN_WIDTH / ASPECT_RATIO)
 local PILOT_USERNAME = "TuongL"
+local FOV = 90 -- math.atan(3/4 * math.tan(deg / 2)) * 2
 
 --[[ STATE VARIABLES ]]
 
 local pilot = {}
+local camera_position = vector.new()
 local plane = {
     position = vector.new(),
     velocity = vector.new(),
@@ -32,7 +36,7 @@ local plane = {
     orientation = vector.new(), -- x = Roll, y = Pitch, z = Yaw
 
     speed = 0,
-    barometric_altitude = 0,
+    altitude = 0, -- Note: this is barometric
 }
 
 --[[ PERIPHERALS SETUP ]]
@@ -47,9 +51,6 @@ HOLOGRAM.Rename("HMD_" .. PILOT_USERNAME)
 elements.set_screen(HOLOGRAM)
 elements.set_screen_width(HMD_SCREEN_WIDTH)
 elements.set_screen_height(HMD_SCREEN_HEIGHT)
--- networking.set_modem(MODEM)
--- networking.set_channels(INCOMING_CHANNEL, OUTGOING_CHANNEL)
--- networking.set_id(MY_ID)
 
 --[[ FUNCTIONS ]]
 
@@ -98,19 +99,29 @@ local function draw_char(x, y, char_key, colour, scale)
     HOLOGRAM.Blit(x, y, char_width, char_height, bake_bitmap(char_data, colour), 0)
 end
 
+--- @TODO: add space support (instead of printing a 0 bitmap) to save performance
+--- also add \t support.
+--- @TODO: move these functions to somewhere else (module)
 local function draw_string(x, y, text, colour, scale)
     scale = (scale and scale > 1) and scale or 1
+    local cur_x, cur_y = x, y
     for i = 1, #text do
         local char = text:sub(i, i)
-        local char_key = string.format("%02X", string.byte(char)) -- Convert character to hex key
-        draw_char(x + (i - 1) * font.char_width * scale, y, char_key, colour, scale)
+        if char == "\n" then
+            cur_x, cur_y = x, cur_y + font.char_width * scale
+        elseif char == "\t" then
+            cur_x = cur_x + font.char_width * scale * 4
+        elseif char == " " then
+            cur_x = cur_x + font.char_width * scale
+        else
+            local char_key = string.format("%02X", string.byte(char)) -- Convert character to hex key
+            draw_char(cur_x, cur_y, char_key, colour, scale)
+            cur_x = cur_x + font.char_width * scale
+        end
     end
 end
 
 local function update_information()
-    -- Relevant fields: .x .y .z .eyeHeight .yaw .pitch
-    pilot = PLAYER_DETECTOR.getPlayer(PILOT_USERNAME)
-
     plane.position = utils.tbl_to_vec(ship.getWorldspacePosition())
     plane.velocity = utils.tbl_to_vec(ship.getVelocity())
     plane.omega = utils.tbl_to_vec(ship.getOmega())
@@ -123,63 +134,81 @@ local function update_information()
     )
 
     plane.speed = plane.velocity:length()
-    plane.barometric_altitude = plane.position.y - SEA_LEVEL
+    plane.altitude = plane.position.y - SEA_LEVEL
+
+    -- Relevant fields: .x .y .z .eyeHeight .yaw .pitch
+    pilot = PLAYER_DETECTOR.getPlayer(PILOT_USERNAME)
+    --- @TODO: take ship roll pitch and yaw into account
+    camera_position = vector.new(pilot.x, pilot.y + pilot.eyeHeight, pilot.z)
+end
+
+--- @param obj_pos table Vector(x, y, z)
+--- @return Vector2D
+local function proj_3d_to_2d(obj_pos)
+    local fov = FOV -- degrees
+    local aspect_ratio = ASPECT_RATIO
+    local screen_width = HMD_SCREEN_WIDTH
+    local screen_height = HMD_SCREEN_HEIGHT
+    local cam_pos = camera_position -- vector.new(x, y, z)
+    local cam_yaw = pilot.yaw       -- degrees
+    local cam_pitch = pilot.pitch   -- degrees
+
+    local screen_x, screen_y
+    return vector2d.new(screen_x, screen_y)
 end
 
 local function main()
+    --[[
     local element1 = elements.rectangle().create(
         vector2d.new(HMD_SCREEN_WIDTH * 0.4, HMD_SCREEN_HEIGHT * 0.4),
-        2, 100, 10, HMD_TEXT_COLOUR
+        2, 100, 5, HMD_TEXT_COLOUR
     )
     local element2 = elements.triangle().create(
         vector2d.new(HMD_SCREEN_WIDTH * 0.5, HMD_SCREEN_HEIGHT * 0.5),
-        100, 10, HMD_TEXT_COLOUR
+        100, 2, HMD_TEXT_COLOUR
     )
     local element3 = elements.polygon().create(
         vector2d.new(HMD_SCREEN_WIDTH * 0.6, HMD_SCREEN_HEIGHT * 0.6),
-        5, 100, 10, HMD_TEXT_COLOUR
+        5, 100, 3, HMD_TEXT_COLOUR
     )
     local element4 = elements.circle().create(
         vector2d.new(HMD_SCREEN_WIDTH * 0.7, HMD_SCREEN_HEIGHT * 0.7),
-        100, 10, HMD_TEXT_COLOUR
+        100, 4, HMD_TEXT_COLOUR
     )
     local element5 = elements.curved_line().create(
         vector2d.new(HMD_SCREEN_WIDTH * 0.8, HMD_SCREEN_HEIGHT * 0.8),
         1, false,
-        100, 10, HMD_TEXT_COLOUR
+        100, 2, HMD_TEXT_COLOUR
     )
     local element6 = elements.diamond().create(
         vector2d.new(HMD_SCREEN_WIDTH * 0.9, HMD_SCREEN_HEIGHT * 0.4),
-        1, 100, 10, HMD_TEXT_COLOUR
+        1, 100, 2, HMD_TEXT_COLOUR
     )
+    ]]
+
+    local box = elements.rectangle().create(
+        vector2d.new(HMD_SCREEN_WIDTH * 0.5, HMD_SCREEN_HEIGHT * 0.5),
+        1, 100, 2, HMD_TEXT_COLOUR
+    )
+
+    local red_torch_pos = vector.new(-11, -4, 2)
+    local blue_torch_pos = vector.new(-18, -7, -3)
     while true do
         update_information()
-
-        -- local t1 = utils.time_seconds()
         HOLOGRAM.Clear()
-        draw_string(
-            HMD_SCREEN_WIDTH * 0.2, HMD_SCREEN_HEIGHT * 0.2,
-            utils.center_string(tostring(utils.round(-pilot.yaw % 360)), 3),
-            HMD_TEXT_COLOUR, 4
+        draw_string(0, 0,
+            "Head XYZ:" .. tostring(camera_position:round()) .. "\n" ..
+            "Y/P:     " .. tostring(vector2d.new(pilot.yaw, pilot.pitch):round()) .. "\n" ..
+            "Box XY:  " .. tostring(box.center_point:round()),
+            HMD_TEXT_COLOUR, 3
         )
-        draw_string(HMD_SCREEN_WIDTH * 0.3, HMD_SCREEN_HEIGHT * 0.3, "\x05\x1A\xAB New font!", HMD_TEXT_COLOUR, 3)
 
-        element1.draw()
-        element2.draw()
-        element3.draw()
-        element4.draw()
-        element5.draw()
-        element6.draw()
-
-        -- HOLOGRAM.DrawTriangle(
-        --     HMD_SCREEN_WIDTH * 0.4, HMD_SCREEN_HEIGHT * 0.4,
-        --     HMD_SCREEN_WIDTH * 0.5, HMD_SCREEN_HEIGHT * 0.5,
-        --     HMD_SCREEN_WIDTH * 0.3, HMD_SCREEN_HEIGHT * 0.5,
-        --     0xFF0000FF, 0x00FF00FF, 0x0000FFFF, 0
-        -- )
+        box.center_point = proj_3d_to_2d(red_torch_pos)
+        box.draw()
+        box.center_point = proj_3d_to_2d(blue_torch_pos)
+        box.draw()
 
         HOLOGRAM.Flush()
-        -- print(utils.time_seconds() - t1)
         os.sleep(0.05)
     end
 end
