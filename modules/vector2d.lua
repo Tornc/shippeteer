@@ -1,5 +1,10 @@
 --[[
     It is literally the Vector API but the Z axis has been gouged out.
+    See: https://github.com/cc-tweaked/CC-Tweaked/blob/mc-1.20.x/projects/core/src/main/resources/data/computercraft/lua/rom/apis/vector.lua
+    
+    I take 0 credit for the code, but I do take full responsibility 
+    for all the bugs that may occur when using this module. (The most
+    likely cause is copying gone wrong.)
 ]]
 
 local vector2d = {}
@@ -186,7 +191,7 @@ vmetatable = {
 ---
 --- @param x number The X coordinate or direction of the vector.
 --- @param y number The Y coordinate or direction of the vector.
---- @return Vector2D The constructed vector.
+--- @return table vector The constructed vector.
 function vector2d.new(x, y)
     return setmetatable({
         x = tonumber(x) or 0,
