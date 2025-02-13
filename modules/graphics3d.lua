@@ -8,7 +8,7 @@ local pretty = require("cc.pretty")
     3D GRAPHICS MODULE
 ]]
 
---- @TODO: figure out if this works with Minecraft's weird-ass 1:1 vFOV (not 4:3)
+--- @TODO: verify this in-game
 local graphics_3d = setmetatable({}, {})
 
 --- @class Camera
@@ -56,7 +56,7 @@ function graphics_3d.camera()
     --- @param screen_height integer
     --- @param near number Near clipping plane distance
     --- @param far number Far clipping plane distance
-    --- @return table
+    --- @return Camera
     function self.create(vfov_deg, screen_width, screen_height, near, far)
         self.vfov_deg = vfov_deg
         self.screen_width = screen_width
@@ -83,20 +83,21 @@ function graphics_3d.camera()
     return self
 end
 
+--- Converts a 3D coordinate into a 2D position on screen.
 --- @param point table 3d Vector
 --- @param camera Camera
---- @return integer?
---- @return integer?
+--- @return integer? x position on screen.
+--- @return integer? y position on screen.
 function graphics_3d.project(point, camera)
     -- Convert 3d vectors to 4d vectors.
     local vertex_4d = matrix { { point.x }, { point.y }, { point.z }, { 1 } }
-    local camera_pos_4d = matrix { { camera.position.x }, { camera.position.y }, { camera.position.z }, { 0 } }
+    local camera_pos_4d = matrix { { camera.position.x }, { camera.position.y }, { camera.position.z }, { 1 } }
     -- Translate vertex to camera space
     local translated = vertex_4d - camera_pos_4d
     -- Apply view rotation
     local rotated = camera.view_rotation_matrix * translated
     --- @LATER: this causes clipping issues; lines will disappear when a shape is too close.
-    --- This shouldn't be a problem for my use-case, since I'm not drawing any 3D shapes very 
+    --- This shouldn't be a problem for my use-case, since I'm not drawing any 3D shapes very
     --- close to the camera.
     -- Don't project if behind camera.
     if rotated[3][1] <= camera.near then return nil, nil end
@@ -105,8 +106,8 @@ function graphics_3d.project(point, camera)
     -- Perspective divide
     projected = projected / projected[4][1] -- Normalise by w
     -- Screen coord conversion
-    local screen_x = utils.round((projected[0] + 1) * camera.screen_width / 2)
-    local screen_y = utils.round((1 - projected[1]) * camera.screen_height / 2)
+    local screen_x = utils.round((projected[1][1] + 1) * camera.screen_width / 2)
+    local screen_y = utils.round((1 - projected[2][1]) * camera.screen_height / 2)
     return screen_x, screen_y
 end
 
@@ -116,7 +117,7 @@ end
 --- @param threshold number In degrees; how far the camera can be away from point but still be considered.
 --- @return table? focused_target
 function graphics_3d.get_focused_target(targets, camera, threshold)
-    local threshold_rad = math.radians(threshold)
+    local threshold_rad = math.rad(threshold)
     local focused_target
     local smallest_distance = math.huge
 
@@ -129,7 +130,7 @@ function graphics_3d.get_focused_target(targets, camera, threshold)
     )
     for target in targets do
         local to_target = target.position - camera.position
-        local distance = to_target:normalize()
+        local distance = to_target:length()
         if distance == 0 then goto continue end
         if
             distance < smallest_distance and
